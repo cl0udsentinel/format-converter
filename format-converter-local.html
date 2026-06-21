@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Format Converter — Local</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root{ --ink:#1e293b; --muted:#64748b; --line:#e2e8f0; --accent:#4f46e5; --accent-d:#4338ca;
+         --ok-bg:#ecfdf5; --ok-fg:#047857; --ok-line:#a7f3d0;
+         --warn-bg:#fffbeb; --warn-fg:#b45309; --warn-line:#fde68a;
+         --err-bg:#fef2f2; --err-fg:#b91c1c; --err-line:#fecaca; }
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f8fafc;color:var(--ink);margin:0;}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 24px;}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;}
+  .top h1{font-size:20px;margin:0;}
+  .top p{margin:2px 0 0;color:var(--muted);font-size:13px;}
+  .badge{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ok-fg);background:var(--ok-bg);border:1px solid var(--ok-line);padding:5px 10px;border-radius:999px;white-space:nowrap;}
+  .progress{display:flex;align-items:center;margin-bottom:26px;}
+  .pstep{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:60px;}
+  .circle{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--muted);background:#fff;}
+  .circle.active{border-color:var(--accent);color:var(--accent);}
+  .circle.done{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .plabel{font-size:10.5px;color:#94a3b8;text-align:center;}
+  .plabel.active{color:var(--accent-d);font-weight:600;}
+  .pline{flex:1;height:2px;background:var(--line);margin-bottom:18px;}
+  .pline.done{background:var(--accent);}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px;min-height:380px;box-shadow:0 1px 2px rgba(0,0,0,0.03);}
+  .card h2{margin:0 0 4px;font-size:16px;}
+  .hint{color:var(--muted);font-size:13px;margin:0 0 16px;}
+  .drop{border:2px dashed #cbd5e1;border-radius:12px;padding:32px;text-align:center;cursor:pointer;background:#f8fafc;transition:.15s;}
+  .drop:hover, .drop.over{border-color:var(--accent);background:#eef2ff;}
+  .drop .icon{font-size:26px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{background:#f8fafc;color:var(--muted);font-size:11px;text-transform:uppercase;text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);}
+  td{padding:6px 10px;border-bottom:1px solid #f1f5f9;white-space:nowrap;}
+  .tablebox{border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:320px;margin-top:8px;}
+  .btn{font-size:13px;font-weight:600;border-radius:9px;padding:9px 16px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);display:inline-flex;align-items:center;gap:6px;}
+  .btn:hover{background:#f8fafc;}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn.primary:hover{background:var(--accent-d);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .footer-nav{display:flex;justify-content:space-between;margin-top:18px;}
+  .pill{font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;border:1px solid;}
+  .pill.matched{background:var(--ok-bg);color:var(--ok-fg);border-color:var(--ok-line);}
+  .pill.review{background:var(--warn-bg);color:var(--warn-fg);border-color:var(--warn-line);}
+  .pill.unmatched{background:var(--err-bg);color:var(--err-fg);border-color:var(--err-line);}
+  select,input[type=text],input[type=number]{font-size:13px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;}
+  label.row{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:9px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;}
+  .errorbox{display:flex;gap:8px;font-size:13px;color:var(--err-fg);background:var(--err-bg);border:1px solid var(--err-line);padding:9px 12px;border-radius:9px;margin-bottom:16px;}
+  .startcards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+  .startcard{border:2px solid var(--line);border-radius:12px;padding:16px;cursor:pointer;text-align:left;background:#fff;}
+  .startcard:hover{border-color:var(--accent);}
+  .startcard b{display:block;margin-bottom:3px;font-size:14px;}
+  .startcard span{font-size:12.5px;color:var(--muted);}
+  .proflist-item{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:9px;padding:8px 12px;margin-bottom:7px;font-size:13px;}
+  .summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;}
+  .sumcard{border-radius:10px;padding:10px 14px;border:1px solid;}
+  .sumcard .v{font-size:22px;font-weight:700;}
+  .sumcard .l{font-size:11.5px;}
+  .ok-c{background:var(--ok-bg);color:var(--ok-fg);border-color:var(--ok-line);}
+  .warn-c{background:var(--warn-bg);color:var(--warn-fg);border-color:var(--warn-line);}
+  .slate-c{background:#f8fafc;color:#475569;border-color:var(--line);}
+  .small-muted{font-size:11.5px;color:#94a3b8;margin-top:14px;}
+  .editrow{display:flex;align-items:center;gap:10px;border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:9px;padding:8px 10px;margin-bottom:8px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+/* ======================= STATE ======================= */
+const STORAGE_KEY = "fc_profiles_v1";
+let state = {
+  step: 1, error: "",
+  savedProfiles: JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"),
+  targetFileName: "", targetHeaders: [], targetSampleRows: [], formatRules: [],
+  inputFileNames: [], inputHeaders: [], inputRows: [],
+  columnMap: [], recodeRules: [],
+  settings: { format:"CSV", separator:",", header:true, trim:false, skipEmpty:false, quoteText:false,
+              overrideDate:false, dateFormat:"YYYY-MM-DD", overrideDecimals:false, decimals:2,
+              overrideCase:false, caseValue:"Title", replaceEmpty:false, replaceValue:"" },
+  result: null, profileName: ""
+};
+
+function setState(patch){ state = {...state, ...patch}; render(); }
+function saveProfilesToDisk(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedProfiles)); }
+
+const STEPS = ["Start","Target format","Input file","Mapping","Output settings","Preview","Download"];
+
+/* ======================= PARSING ======================= */
+async function parseFile(file){
+  const ext = file.name.toLowerCase().split(".").pop();
+
+  if(["csv","tsv","txt"].includes(ext)){
+    const text = await file.text();
+    if(!text || !text.trim()) throw new Error(`"${file.name}" appears to be empty.`);
+    const res = Papa.parse(text, {header:true, skipEmptyLines:true});
+    const headers = (res.meta && res.meta.fields) ? res.meta.fields : [];
+    if(!headers.length) throw new Error(`Couldn't find a header row in "${file.name}". Make sure the first line has column names.`);
+    return { headers, rows: res.data || [] };
+  }
+
+  if(["xlsx","xls"].includes(ext)){
+    let wb;
+    try{
+      const buf = await file.arrayBuffer();
+      wb = XLSX.read(buf, {type:"array"});
+    }catch(e){
+      throw new Error(`Couldn't read "${file.name}" as an Excel file. It may be corrupted, password-protected, or not actually an .xlsx/.xls file.`);
+    }
+    if(!wb || !wb.SheetNames || !wb.SheetNames.length){
+      throw new Error(`"${file.name}" doesn't contain any readable sheets.`);
+    }
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(sheet, {defval:""});
+    if(!json.length) throw new Error(`The first sheet in "${file.name}" has no data rows.`);
+    return { headers: Object.keys(json[0]), rows: json };
+  }
+
+  if(ext === "json"){
+    const text = await file.text();
+    let data;
+    try{ data = JSON.parse(text); }
+    catch(e){ throw new Error(`"${file.name}" isn't valid JSON.`); }
+    const arr = Array.isArray(data) ? data : [data];
+    if(!arr.length || typeof arr[0] !== "object" || arr[0] === null){
+      throw new Error(`"${file.name}" should be a JSON array of objects (e.g. [{"col": "value"}, ...]).`);
+    }
+    return { headers: Object.keys(arr[0]), rows: arr };
+  }
+
+  if(ext === "pdf") throw new Error("PDF extraction isn't bundled here — export the PDF to CSV/Excel first, then upload that.");
+  throw new Error(`Unsupported file type: ".${ext}". Use CSV, TSV, TXT, JSON, XLSX, or XLS.`);
+}
+
+/* ======================= FORMAT DETECTION ======================= */
+const DATE_PATTERNS = [
+  {re:/^\d{4}-\d{2}-\d{2}$/, label:"YYYY-MM-DD", key:"YYYY-MM-DD"},
+  {re:/^\d{2}\/\d{2}\/\d{4}$/, label:"DD/MM/YYYY", key:"DD/MM/YYYY"},
+  {re:/^\d{2}-\d{2}-\d{4}$/, label:"MM-DD-YYYY", key:"MM-DD-YYYY"},
+  {re:/^\d{2}\/\d{2}\/\d{2}$/, label:"DD/MM/YY", key:"DD/MM/YY"},
+  {re:/^\d{1,2}\s[A-Za-z]{3}\s\d{4}$/, label:"DD MMM YYYY", key:"DD MMM YYYY"},
+  {re:/^\d{8}$/, label:"MMDDYYYY (no separator)", key:"MMDDYYYY"},
+  {re:/^\d{10}$/, label:"Unix timestamp (seconds)", key:"UNIX_S"},
+  {re:/^\d{13}$/, label:"Unix timestamp (ms)", key:"UNIX_MS"},
+];
+function detectDate(values){
+  if(!values.length) return null;
+  for(const p of DATE_PATTERNS){
+    const m = values.filter(v=>p.re.test(v.trim())).length;
+    if(m/values.length >= 0.8) return {label:p.label, key:p.key};
+  }
+  return null;
+}
+function mostCommon(arr){ const c={}; arr.forEach(v=>c[v]=(c[v]||0)+1); return Number(Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]); }
+function detectNumber(values){
+  if(!values.length) return null;
+  const re = /^[\-(]?[$€£₹]?\s?[\d.,\s]+\)?%?$/;
+  const numeric = values.filter(v=>re.test(v.trim()) && /\d/.test(v));
+  if(numeric.length === 0 || numeric.length/values.length < 0.8) return null;
+  const decCounts = numeric.map(v=>{ const c=v.replace(/[^\d.,]/g,""); const m=c.match(/[.,](\d+)$/); return m?m[1].length:0; });
+  const decimals = mostCommon(decCounts);
+  const hasThousands = numeric.some(v=>/\d[.,]\d{3}\b/.test(v));
+  const curMatch = values.find(v=>/[$€£₹]/.test(v));
+  const currencySymbol = curMatch ? curMatch.match(/[$€£₹]/)[0] : null;
+  const currencyPrefix = curMatch ? /^[$€£₹]/.test(curMatch.trim()) : null;
+  const negParen = values.some(v=>/^\(.*\)$/.test(v.trim()));
+  const zeroPadded = values.length>0 && values.every(v=>/^0\d/.test(v.trim()));
+  let label = decimals + " decimal place" + (decimals===1?"":"s");
+  if(hasThousands) label += ", thousands separator";
+  if(currencySymbol) label += `, currency ${currencySymbol} (${currencyPrefix?"prefix":"suffix"})`;
+  if(negParen) label += ", negatives in parentheses";
+  if(zeroPadded) label += ", zero-padded";
+  return {label, decimals, hasThousands, currencySymbol, currencyPrefix, negParen, zeroPadded};
+}
+function detectText(values){
+  if(!values.length) return {label:"Mixed case"};
+  const letters = values.filter(v=>/[A-Za-z]/.test(v));
+  const isUpper = letters.length>0 && letters.every(v=>v===v.toUpperCase());
+  const isLower = letters.length>0 && letters.every(v=>v===v.toLowerCase());
+  const isTitle = letters.length>0 && letters.every(v=>v.split(/\s+/).every(w=>!w[0]||w[0]===w[0].toUpperCase()));
+  const lens = new Set(values.map(v=>v.length));
+  const fixedLength = lens.size===1 ? values[0].length : null;
+  const trailingSpace = values.some(v=>/\s$/.test(v));
+  const leadingSpace = values.some(v=>/^\s/.test(v));
+  let label = "Mixed case";
+  if(isUpper) label="UPPERCASE"; else if(isLower) label="lowercase"; else if(isTitle) label="Title Case";
+  if(fixedLength) label += `, fixed length ${fixedLength}`;
+  if(trailingSpace) label += ", right-padded with spaces";
+  if(leadingSpace) label += ", left-padded with spaces";
+  return {label, isUpper, isLower, isTitle, fixedLength, leadingSpace, trailingSpace};
+}
+function detectNullRepr(rows, col){
+  const rawCells = rows.map(r=>r[col]);
+  // explicit textual markers like "N/A", "NULL", "-" take priority
+  const tokenBlank = rawCells.find(v=>typeof v==="string" && ["N/A","NA","NULL","n/a","null","-"].includes(v.trim()));
+  if(tokenBlank !== undefined){
+    const t = tokenBlank.trim();
+    return { raw: t, display: t };
+  }
+  // otherwise look for a logically-empty cell and preserve its exact raw content (could be "", "   ", etc.)
+  const whitespaceBlank = rawCells.find(v=> v===undefined || v===null || (typeof v==="string" && v.trim()===""));
+  if(whitespaceBlank !== undefined){
+    const raw = (whitespaceBlank===undefined || whitespaceBlank===null) ? "" : String(whitespaceBlank);
+    const display = raw.length ? `blank (${raw.length} space${raw.length===1?"":"s"})` : "blank (empty string)";
+    return { raw, display };
+  }
+  return null;
+}
+function detectColumnRules(headers, rows){
+  return headers.map(col=>{
+    const raw = rows.map(r=>r[col]).filter(v=>v!==undefined && v!==null && String(v).trim()!=="");
+    const strValues = raw.map(v=>String(v));
+    const dateInfo = detectDate(strValues);
+    const numInfo = !dateInfo ? detectNumber(strValues) : null;
+    const textInfo = !dateInfo && !numInfo ? detectText(strValues) : null;
+    let type="Text", rule="", detail=textInfo;
+    if(dateInfo){ type="Date"; rule=dateInfo.label; detail=dateInfo; }
+    else if(numInfo){ type="Number"; rule=numInfo.label; detail=numInfo; }
+    else { type="Text"; rule = textInfo ? textInfo.label : "Mixed case"; }
+    return { column:col, type, rule, detail, nullRule: detectNullRepr(rows,col), editing:false };
+  });
+}
+
+/* ======================= MAPPING ======================= */
+function normalize(s){ return String(s).toLowerCase().replace(/[^a-z0-9]/g,""); }
+function levenshtein(a,b){
+  const m=a.length,n=b.length; const dp=Array.from({length:m+1},()=>new Array(n+1).fill(0));
+  for(let i=0;i<=m;i++) dp[i][0]=i; for(let j=0;j<=n;j++) dp[0][j]=j;
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+  return dp[m][n];
+}
+function similarity(a,b){ const na=normalize(a),nb=normalize(b); if(!na.length||!nb.length) return 0; return 1-levenshtein(na,nb)/Math.max(na.length,nb.length); }
+function autoMapTargets(targetHeaders, inputHeaders){
+  const used = new Set();
+  return targetHeaders.map(t=>{
+    let best=null,bestScore=0;
+    inputHeaders.forEach(inp=>{
+      if(used.has(inp)) return;
+      const score = normalize(inp)===normalize(t) ? 1 : similarity(inp,t);
+      if(score>bestScore){bestScore=score; best=inp;}
+    });
+    if(best && bestScore>=0.6){
+      used.add(best);
+      return {targetColumn:t, action:"map", inputColumn:best, sampleValue:"", defaultValue:""};
+    }
+    return {targetColumn:t, action:null, inputColumn:null, sampleValue:"", defaultValue:""};
+  });
+}
+function getSampleValues(col){
+  const vals = (state.targetSampleRows||[]).map(r=>r[col]).filter(v=>v!==undefined && v!==null && String(v).trim()!=="");
+  return Array.from(new Set(vals.map(v=>String(v)))).slice(0,8);
+}
+function columnStatus(c){
+  if(!c.action) return "unmatched";
+  if(c.action==="map") return c.inputColumn ? "matched" : "review";
+  if(c.action==="sample") return c.sampleValue ? "matched" : "review";
+  if(c.action==="default" || c.action==="blank" || c.action==="skip") return "matched";
+  return "unmatched";
+}
+function statusLabel(s){ return s==="matched" ? "Resolved" : s==="review" ? "Review" : "Action needed"; }
+
+/* ======================= FORMATTING / OUTPUT ======================= */
+function pad2(n){ return String(n).padStart(2,"0"); }
+function parseLooseDate(v){ const d=new Date(v); return isNaN(d.getTime())?null:d; }
+function formatDateByPattern(d, pattern){
+  const map = { YYYY:d.getFullYear(), YY:String(d.getFullYear()).slice(-2), MM:pad2(d.getMonth()+1), DD:pad2(d.getDate()), MMM:d.toLocaleString("en-US",{month:"short"}) };
+  let out = pattern || "YYYY-MM-DD";
+  return out.replace("YYYY",map.YYYY).replace("MMM",map.MMM).replace("MM",map.MM).replace("DD",map.DD).replace("YY",map.YY);
+}
+function applyCase(v,mode){
+  if(mode==="UPPER") return v.toUpperCase();
+  if(mode==="lower") return v.toLowerCase();
+  if(mode==="Title") return v.replace(/\w\S*/g, t=>t[0].toUpperCase()+t.slice(1).toLowerCase());
+  return v;
+}
+function applyFormatting(value, rule, ov){
+  let v = value===undefined||value===null ? "" : String(value);
+  if(v.trim()===""){
+    if(ov.replaceEmpty && ov.replaceValue) return ov.replaceValue;
+    if(rule && rule.nullRule){
+      let fill = rule.nullRule.raw;
+      if(ov.trim) fill = fill.trim();
+      return fill;
+    }
+    return "";
+  }
+  if(ov.trim) v = v.trim();
+  if((rule && rule.type==="Number") || ov.overrideDecimals){
+    const num = parseFloat(v.replace(/[^0-9.\-]/g,""));
+    if(!isNaN(num)){
+      const decimals = ov.overrideDecimals ? ov.decimals : (rule && rule.detail && rule.detail.decimals!=null ? rule.detail.decimals : 2);
+      v = num.toFixed(decimals);
+      if(rule && rule.detail && rule.detail.hasThousands){
+        const parts = v.split("."); parts[0]=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,","); v=parts.join(".");
+      }
+    }
+  } else if((rule && rule.type==="Date") || ov.overrideDate){
+    const d = parseLooseDate(v);
+    if(d) v = formatDateByPattern(d, ov.overrideDate ? ov.dateFormat : ((rule&&rule.detail&&rule.detail.key)||(rule&&rule.rule)));
+  } else {
+    if(ov.overrideCase) v = applyCase(v, ov.caseValue);
+    else if(rule && rule.detail && rule.detail.isUpper) v = v.toUpperCase();
+    else if(rule && rule.detail && rule.detail.isLower) v = v.toLowerCase();
+    else if(rule && rule.detail && rule.detail.isTitle) v = applyCase(v,"Title");
+  }
+  if(ov.quoteText && !(rule && rule.type==="Number")) v = `"${v}"`;
+  return v;
+}
+function convertRows(inputRows, columnMap, rulesByCol, ov, recodeRules){
+  let skipped=0; const blankCounts={};
+  const activeCols = columnMap.filter(c=>c.action!=="skip");
+  const rows = inputRows.map(row=>{
+    if(ov.skipEmpty && Object.values(row).every(v=>String(v??"").trim()==="")){ skipped++; return null; }
+    const out = {};
+    activeCols.forEach(c=>{
+      const rule = rulesByCol[c.targetColumn];
+      let val;
+      if(c.action==="map"){
+        const rawVal = row[c.inputColumn];
+        const rawStr = (rawVal===undefined||rawVal===null) ? "" : String(rawVal).trim();
+        const recode = (recodeRules||[]).find(rr=>rr.column===c.targetColumn && String(rr.find).trim()===rawStr);
+        if(recode){
+          val = ov.trim ? String(recode.replace).trim() : recode.replace;
+          if(ov.quoteText) val = `"${val}"`;
+        } else {
+          val = applyFormatting(rawVal, rule, ov);
+        }
+      }
+      else if(c.action==="sample") val = ov.trim ? String(c.sampleValue||"").trim() : (c.sampleValue||"");
+      else if(c.action==="default") val = ov.trim ? String(c.defaultValue||"").trim() : (c.defaultValue||"");
+      else if(c.action==="blank") val = applyFormatting("", rule, ov);
+      else val = "";
+      out[c.targetColumn] = val;
+      if(String(val).trim()==="") blankCounts[c.targetColumn]=(blankCounts[c.targetColumn]||0)+1;
+    });
+    return out;
+  }).filter(Boolean);
+  return {rows, skipped, blankCounts, columns: activeCols.map(c=>c.targetColumn)};
+}
+function generateOutputText(rows, columns, settings){
+  if(settings.format==="JSON") return JSON.stringify(rows, null, 2);
+  const sep = settings.separator;
+  const lines = [];
+  if(settings.header) lines.push(columns.join(sep));
+  rows.forEach(r=>lines.push(columns.map(c=>r[c]).join(sep)));
+  return lines.join("\n");
+}
+function downloadText(content, filename, mime){
+  const blob = new Blob([content], {type:mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ======================= RENDER ======================= */
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+function render(){
+  const app = document.getElementById("app");
+  const scrollY = window.scrollY;
+  app.innerHTML = `
+    <div class="top">
+      <div><h1>Format Converter</h1><p>Rule-based file conversion, entirely in your browser</p></div>
+      <div class="badge">🔒 100% local — saved to this browser only</div>
+    </div>
+    ${renderProgress()}
+    ${state.error ? `<div class="errorbox">⚠️ ${esc(state.error)}</div>` : ""}
+    <div class="card">${renderStep()}</div>
+    ${state.step < 7 ? renderFooterNav() : ""}
+  `;
+  bindEvents();
+  window.scrollTo(0, scrollY);
+}
+
+function renderProgress(){
+  return `<div class="progress">${STEPS.map((label,i)=>{
+    const n=i+1, active=n===state.step, done=n<state.step;
+    return `
+      <div class="pstep">
+        <div class="circle ${done?"done":active?"active":""}">${done?"✓":n}</div>
+        <div class="plabel ${active?"active":""}">${label}</div>
+      </div>
+      ${n<STEPS.length ? `<div class="pline ${done?"done":""}"></div>` : ""}
+    `;
+  }).join("")}</div>`;
+}
+
+function renderFooterNav(){
+  const canNext = canGoNext();
+  return `<div class="footer-nav">
+    <button class="btn" id="backBtn" ${state.step===1?"disabled":""}>← Back</button>
+    <button class="btn primary" id="nextBtn" ${canNext?"":"disabled"}>${state.step===5?"Run conversion":"Next →"}</button>
+  </div>`;
+}
+
+function canGoNext(){
+  if(state.step===2) return state.targetHeaders.length>0;
+  if(state.step===3) return state.inputRows.length>0;
+  if(state.step===4){
+    return state.columnMap.every(c => columnStatus(c) === "matched");
+  }
+  return true;
+}
+
+function renderStep(){
+  switch(state.step){
+    case 1: return step1();
+    case 2: return step2();
+    case 3: return step3();
+    case 4: return step4();
+    case 5: return step5();
+    case 6: return step6();
+    case 7: return step7();
+  }
+}
+
+/* ---- Step 1 ---- */
+function step1(){
+  const profiles = state.savedProfiles;
+  return `
+    <h2>Start a conversion</h2>
+    <div class="startcards">
+      <div class="startcard" id="newConvCard"><b>🆕 Start new conversion</b><span>Upload a sample target file and detect formatting from scratch.</span></div>
+      <div class="startcard" id="importCard"><b>📂 Import a profile backup</b><span>Load a previously exported profiles JSON file.</span><input type="file" id="importInput" accept=".json" style="display:none"/></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h3 style="font-size:13px;margin:0;">Saved profiles (stored in this browser)</h3>
+      ${profiles.length>0 ? `<button class="btn" id="exportBtn" style="padding:5px 10px;font-size:12px;">💾 Export backup</button>` : ""}
+    </div>
+    ${profiles.length===0 ? `<p style="color:#94a3b8;font-size:13px;font-style:italic;">No profiles yet — finish a conversion and one will be saved here automatically.</p>` :
+      profiles.map((p,i)=>`
+        <div class="proflist-item">
+          <div><b>${esc(p.name)}</b><div style="color:#94a3b8;font-size:11.5px;">${esc(p.date)} · ${p.rowCount} rows · ${esc(p.status)}</div></div>
+          <button class="btn" data-load="${i}" style="padding:5px 10px;font-size:12px;">Load</button>
+        </div>
+      `).join("")}
+    <p class="small-muted">Profiles are saved with <code>localStorage</code> in this browser — they'll be here next time you open this file, even after closing the tab. They won't sync across other computers or browsers.</p>
+  `;
+}
+
+/* ---- Step 2 ---- */
+function step2(){
+  return `
+    <h2>Upload the target/sample format file</h2>
+    <p class="hint">Include a header row plus a few sample data rows so formatting can be detected automatically.</p>
+    <div class="drop" id="targetDrop"><div class="icon">⬆️</div><div>Drag a file here, or click to browse</div><div class="hint" style="margin:4px 0 0;">CSV, TSV, JSON, TXT, or Excel</div>
+      <input type="file" id="targetInput" accept=".csv,.tsv,.txt,.json,.xlsx,.xls" style="display:none"/>
+    </div>
+    ${state.targetFileName ? `<p style="color:#047857;font-size:13px;margin-top:10px;">Loaded: ${esc(state.targetFileName)}</p>` : ""}
+    ${state.formatRules.length>0 ? `
+      <h3 style="font-size:13px;margin-top:20px;">Detected formatting rules — review and confirm</h3>
+      <div class="tablebox"><table>
+        <thead><tr><th>Column</th><th>Type</th><th>Detected rule</th><th>Empty values</th><th></th></tr></thead>
+        <tbody>${state.formatRules.map((r,i)=>`
+          <tr>
+            <td><b>${esc(r.column)}</b></td>
+            <td>${r.type}</td>
+            <td>${r.editing ? `<input type="text" data-rule-edit="${i}" value="${esc(r.rule)}" style="width:100%"/>` : esc(r.rule)}</td>
+            <td style="color:#64748b">${r.nullRule ? esc(r.nullRule.display) : "—"}</td>
+            <td><button class="btn" data-rule-toggle="${i}" style="padding:3px 8px;font-size:12px;">${r.editing?"✓":"✏️"}</button></td>
+          </tr>
+        `).join("")}</tbody>
+      </table></div>
+    ` : ""}
+  `;
+}
+
+/* ---- Step 3 ---- */
+function step3(){
+  const headers = state.inputHeaders, rows = state.inputRows;
+  return `
+    <h2>Upload the input file(s) to convert</h2>
+    <p class="hint">Upload one or more files — they'll be batched using the same mapping and rules.</p>
+    <div class="drop" id="inputDrop"><div class="icon">⬆️</div><div>Drag files here, or click to browse</div><div class="hint" style="margin:4px 0 0;">CSV, TSV, JSON, TXT, Excel (PDF not supported here)</div>
+      <input type="file" id="inputInput" multiple accept=".csv,.tsv,.txt,.json,.xlsx,.xls" style="display:none"/>
+    </div>
+    ${state.inputFileNames.length>0 ? `<p style="color:#047857;font-size:13px;margin-top:10px;">Loaded: ${esc(state.inputFileNames.join(", "))} — ${rows.length} rows total</p>` : ""}
+    ${rows.length>0 ? `
+      <div class="tablebox"><table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead>
+      <tbody>${rows.slice(0,10).map(r=>`<tr>${headers.map(h=>`<td>${esc(r[h]??"")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    ` : ""}
+  `;
+}
+
+/* ---- Step 4 ---- */
+function step4(){
+  const usedInputs = new Set(state.columnMap.filter(c=>c.action==="map" && c.inputColumn).map(c=>c.inputColumn));
+  const unusedInputs = state.inputHeaders.filter(h=>!usedInputs.has(h));
+  return `
+    <h2>Column mapping</h2>
+    <p class="hint">For each target column, choose where its data comes from.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Target column</th><th>Action</th><th>Detail</th><th>Status</th></tr></thead>
+      <tbody>${state.columnMap.map((c,i)=>{
+        const sampleValues = getSampleValues(c.targetColumn);
+        const status = columnStatus(c);
+        return `
+        <tr>
+          <td><b>${esc(c.targetColumn)}</b></td>
+          <td>
+            <select data-col-action="${i}">
+              <option value="">Choose action…</option>
+              <option value="map" ${c.action==="map"?"selected":""}>Map to an input column</option>
+              <option value="sample" ${c.action==="sample"?"selected":""}>Map from sample record</option>
+              <option value="skip" ${c.action==="skip"?"selected":""}>Skip this column</option>
+              <option value="blank" ${c.action==="blank"?"selected":""}>Blank</option>
+              <option value="default" ${c.action==="default"?"selected":""}>Default value</option>
+            </select>
+          </td>
+          <td>
+            ${c.action==="map" ? `
+              <select data-col-input="${i}">
+                <option value="">— choose input column —</option>
+                ${state.inputHeaders.map(h=>`<option value="${esc(h)}" ${c.inputColumn===h?"selected":""}>${esc(h)}</option>`).join("")}
+              </select>
+            ` : c.action==="sample" ? (
+              sampleValues.length ? `
+                <select data-col-sample="${i}">
+                  <option value="">— choose a sample value —</option>
+                  ${sampleValues.map(v=>`<option value="${esc(v)}" ${c.sampleValue===v?"selected":""}>${esc(v)}</option>`).join("")}
+                </select>
+              ` : `<span style="color:#b91c1c;font-size:12.5px">No sample values found for this column</span>`
+            ) : c.action==="default" ? `
+              <input type="text" data-col-default="${i}" placeholder="Default value" value="${esc(c.defaultValue||"")}"/>
+            ` : c.action==="blank" ? `<span style="color:#94a3b8;font-size:12.5px">Will be left blank</span>`
+            : c.action==="skip" ? `<span style="color:#94a3b8;font-size:12.5px">Removed from output</span>`
+            : `<span style="color:#94a3b8;font-size:12.5px">—</span>`}
+          </td>
+          <td><span class="pill ${status}">${statusLabel(status)}</span></td>
+        </tr>
+      `;}).join("")}</tbody>
+    </table></div>
+    ${unusedInputs.length>0 ? `<p class="small-muted">Not used in any mapping: ${unusedInputs.map(esc).join(", ")}</p>` : ""}
+  `;
+}
+
+/* ---- Step 5 ---- */
+function step5(){
+  const s = state.settings;
+  const sepLabels = {",":"Comma","|":"Pipe","\t":"Tab",";":"Semicolon"};
+  return `
+    <h2>Output format & settings</h2>
+    <div class="grid2">
+      <div>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Output format</label>
+        <select id="fmtSelect" style="width:100%">${["CSV","TSV","TXT","JSON","Pipe-delimited"].map(f=>`<option ${s.format===f?"selected":""}>${f}</option>`).join("")}</select>
+      </div>
+      ${s.format!=="JSON" ? `
+      <div>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Separator</label>
+        <select id="sepSelect" style="width:100%">${Object.entries(sepLabels).map(([v,l])=>`<option value='${v==="\t"?"\\t":v}' ${s.separator===v?"selected":""}>${l}</option>`).join("")}</select>
+      </div>
+      <div><label class="row"><input type="checkbox" id="hdrCheck" ${s.header?"checked":""}/> Include header row</label></div>
+      ` : ""}
+    </div>
+    <h3 style="font-size:13px;">Optional formatting overrides</h3>
+    <label class="row"><input type="checkbox" id="ov_trim" ${s.trim?"checked":""}/> Trim extra whitespace from all values</label>
+    <label class="row"><input type="checkbox" id="ov_skipEmpty" ${s.skipEmpty?"checked":""}/> Skip completely empty rows</label>
+    <label class="row"><input type="checkbox" id="ov_quoteText" ${s.quoteText?"checked":""}/> Wrap text values in double quotes</label>
+    <label class="row"><input type="checkbox" id="ov_overrideDate" ${s.overrideDate?"checked":""}/> Override date format
+      ${s.overrideDate ? `<input type="text" id="ov_dateFormat" value="${esc(s.dateFormat)}" placeholder="e.g. DD/MM/YYYY" style="width:140px"/>` : ""}</label>
+    <label class="row"><input type="checkbox" id="ov_overrideDecimals" ${s.overrideDecimals?"checked":""}/> Override decimal places
+      ${s.overrideDecimals ? `<input type="number" id="ov_decimals" value="${s.decimals}" style="width:70px"/>` : ""}</label>
+    <label class="row"><input type="checkbox" id="ov_overrideCase" ${s.overrideCase?"checked":""}/> Override text case
+      ${s.overrideCase ? `<select id="ov_caseValue"><option ${s.caseValue==="UPPER"?"selected":""}>UPPER</option><option ${s.caseValue==="lower"?"selected":""}>lower</option><option ${s.caseValue==="Title"?"selected":""}>Title</option></select>` : ""}</label>
+    <label class="row"><input type="checkbox" id="ov_replaceEmpty" ${s.replaceEmpty?"checked":""}/> Replace empty values with
+      ${s.replaceEmpty ? `<input type="text" id="ov_replaceValue" value="${esc(s.replaceValue)}" placeholder="e.g. N/A" style="width:120px"/>` : ""}</label>
+
+    <h3 style="font-size:13px;margin-top:20px;">Value recoding</h3>
+    <p class="hint" style="margin-bottom:10px;">Recode specific values for any column — e.g. input "B" → output "1", "S" → "2". Matched on the original input value, applied before other formatting.</p>
+    <div id="recodeRows">
+      ${state.recodeRules.map((r,i)=>`
+        <div class="editrow" style="background:#fff;border-color:var(--line);">
+          <select data-recode-col="${i}" style="min-width:140px;">
+            <option value="">— column —</option>
+            ${state.targetHeaders.map(t=>`<option value="${esc(t)}" ${r.column===t?"selected":""}>${esc(t)}</option>`).join("")}
+          </select>
+          <input type="text" data-recode-find="${i}" placeholder="Find (e.g. B)" value="${esc(r.find||"")}" style="width:110px;"/>
+          <span style="color:#94a3b8;">→</span>
+          <input type="text" data-recode-replace="${i}" placeholder="Replace (e.g. 1)" value="${esc(r.replace||"")}" style="width:110px;"/>
+          <button class="btn" data-recode-remove="${i}" style="padding:5px 9px;font-size:12px;margin-left:auto;">✕</button>
+        </div>
+      `).join("")}
+    </div>
+    <button class="btn" id="addRecodeBtn" style="margin-top:4px;">+ Add recoding rule</button>
+  `;
+}
+
+/* ---- Step 6 ---- */
+function step6(){
+  const r = state.result;
+  if(!r) return `<p style="color:#94a3b8;font-style:italic;">Running conversion…</p>`;
+  return `
+    <h2>Preview & convert</h2>
+    <div class="summary">
+      <div class="sumcard ok-c"><div class="v">${r.rows.length}</div><div class="l">Rows converted</div></div>
+      <div class="sumcard warn-c"><div class="v">${r.skipped}</div><div class="l">Rows skipped</div></div>
+      <div class="sumcard slate-c"><div class="v">${Object.keys(r.blankCounts).length}</div><div class="l">Columns with blanks</div></div>
+    </div>
+    <h3 style="font-size:13px;">Converted output (first 10 rows)</h3>
+    <div class="tablebox"><table><thead><tr>${r.columns.map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead>
+    <tbody>${r.rows.slice(0,10).map(row=>`<tr>${r.columns.map(c=>`<td>${esc(row[c]??"")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+  `;
+}
+
+/* ---- Step 7 ---- */
+function step7(){
+  const defaultName = `${(state.targetFileName||"Profile").replace(/\.[^/.]+$/,"")}_${new Date().toISOString().slice(0,10)}`;
+  return `
+    <h2>Download & save profile</h2>
+    <p class="hint">Your file is generated locally and never uploaded anywhere.</p>
+    <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Profile name</label>
+    <input type="text" id="profileNameInput" value="${esc(state.profileName)}" placeholder="${esc(defaultName)}" style="width:100%;margin-bottom:18px;"/>
+    <button class="btn primary" id="downloadBtn" style="margin-bottom:20px;">⬇ Download converted file</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn" id="anotherBtn">🔁 Convert another file, same profile</button>
+      <button class="btn" id="newBtn">🆕 Start new conversion</button>
+      <button class="btn" id="dashBtn">📂 View saved profiles</button>
+    </div>
+  `;
+}
+
+/* ======================= EVENT HANDLERS ======================= */
+function bindEvents(){
+  const $ = (id)=>document.getElementById(id);
+
+  if($("backBtn")) $("backBtn").onclick = ()=> setState({step: Math.max(1, state.step-1)});
+  if($("nextBtn")) $("nextBtn").onclick = async ()=>{
+    setState({error:""});
+    if(state.step===5){ runConversion(); }
+    setState({step: Math.min(7, state.step+1)});
+  };
+
+  // Step 1
+  if($("newConvCard")) $("newConvCard").onclick = ()=> setState({step:2});
+  if($("importCard")) $("importCard").onclick = ()=> $("importInput").click();
+  if($("importInput")) $("importInput").onchange = (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    file.text().then(text=>{
+      try{
+        const data = JSON.parse(text);
+        const merged = [...data, ...state.savedProfiles];
+        setState({savedProfiles: merged}); saveProfilesToDisk();
+      }catch{ setState({error:"That file doesn't look like a valid profile backup."}); }
+    });
+  };
+  if($("exportBtn")) $("exportBtn").onclick = ()=> downloadText(JSON.stringify(state.savedProfiles,null,2), "conversion_profiles_backup.json", "application/json");
+  document.querySelectorAll("[data-load]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const p = state.savedProfiles[Number(btn.dataset.load)];
+      setState({
+        targetFileName: p.targetFileName, formatRules: p.formatRules,
+        targetHeaders: p.formatRules.map(r=>r.column),
+        columnMap: p.columnMap, settings: p.settings, recodeRules: p.recodeRules || [],
+        step: 2
+      });
+    };
+  });
+
+  // Step 2
+  setupDrop("targetDrop","targetInput", handleTargetFiles);
+  document.querySelectorAll("[data-rule-toggle]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = Number(btn.dataset.ruleToggle);
+      const rules = [...state.formatRules]; rules[i] = {...rules[i], editing: !rules[i].editing};
+      setState({formatRules: rules});
+    };
+  });
+  document.querySelectorAll("[data-rule-edit]").forEach(inp=>{
+    inp.onchange = ()=>{
+      const i = Number(inp.dataset.ruleEdit);
+      const rules = [...state.formatRules]; rules[i] = {...rules[i], rule: inp.value};
+      setState({formatRules: rules});
+    };
+  });
+
+  // Step 3
+  setupDrop("inputDrop","inputInput", handleInputFiles);
+
+  // Step 4
+  document.querySelectorAll("[data-col-action]").forEach(sel=>{
+    sel.onchange = ()=>{
+      const i = Number(sel.dataset.colAction);
+      const columnMap = [...state.columnMap];
+      const action = sel.value || null;
+      columnMap[i] = {...columnMap[i], action, inputColumn: action==="map" ? columnMap[i].inputColumn : null, sampleValue: action==="sample" ? columnMap[i].sampleValue : "", defaultValue: action==="default" ? columnMap[i].defaultValue : ""};
+      setState({columnMap});
+    };
+  });
+  document.querySelectorAll("[data-col-input]").forEach(sel=>{
+    sel.onchange = ()=>{
+      const i = Number(sel.dataset.colInput);
+      const columnMap = [...state.columnMap];
+      columnMap[i] = {...columnMap[i], inputColumn: sel.value || null};
+      setState({columnMap});
+    };
+  });
+  document.querySelectorAll("[data-col-sample]").forEach(sel=>{
+    sel.onchange = ()=>{
+      const i = Number(sel.dataset.colSample);
+      const columnMap = [...state.columnMap];
+      columnMap[i] = {...columnMap[i], sampleValue: sel.value || ""};
+      setState({columnMap});
+    };
+  });
+  document.querySelectorAll("[data-col-default]").forEach(inp=>{
+    inp.onchange = ()=>{
+      const i = Number(inp.dataset.colDefault);
+      const columnMap = [...state.columnMap];
+      columnMap[i] = {...columnMap[i], defaultValue: inp.value};
+      setState({columnMap});
+    };
+  });
+
+  // Step 5
+  bindSettingsInputs($);
+  if($("addRecodeBtn")) $("addRecodeBtn").onclick = ()=> setState({recodeRules: [...state.recodeRules, {column:"", find:"", replace:""}]});
+  document.querySelectorAll("[data-recode-col]").forEach(sel=>{
+    sel.onchange = ()=>{
+      const i = Number(sel.dataset.recodeCol);
+      const rules = [...state.recodeRules]; rules[i] = {...rules[i], column: sel.value};
+      setState({recodeRules: rules});
+    };
+  });
+  document.querySelectorAll("[data-recode-find]").forEach(inp=>{
+    inp.onchange = ()=>{
+      const i = Number(inp.dataset.recodeFind);
+      const rules = [...state.recodeRules]; rules[i] = {...rules[i], find: inp.value};
+      setState({recodeRules: rules});
+    };
+  });
+  document.querySelectorAll("[data-recode-replace]").forEach(inp=>{
+    inp.onchange = ()=>{
+      const i = Number(inp.dataset.recodeReplace);
+      const rules = [...state.recodeRules]; rules[i] = {...rules[i], replace: inp.value};
+      setState({recodeRules: rules});
+    };
+  });
+  document.querySelectorAll("[data-recode-remove]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = Number(btn.dataset.recodeRemove);
+      setState({recodeRules: state.recodeRules.filter((_,idx)=>idx!==i)});
+    };
+  });
+
+  // Step 7
+  if($("profileNameInput")) $("profileNameInput").oninput = (e)=> state.profileName = e.target.value;
+  if($("downloadBtn")) $("downloadBtn").onclick = doDownload;
+  if($("anotherBtn")) $("anotherBtn").onclick = ()=> setState({step:3});
+  if($("newBtn")) $("newBtn").onclick = resetAll;
+  if($("dashBtn")) $("dashBtn").onclick = ()=> setState({step:1});
+}
+
+function setupDrop(dropId, inputId, handler){
+  const drop = document.getElementById(dropId), input = document.getElementById(inputId);
+  if(!drop) return;
+  drop.onclick = ()=> input.click();
+  drop.ondragover = (e)=>{ e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = ()=> drop.classList.remove("over");
+  drop.ondrop = (e)=>{ e.preventDefault(); drop.classList.remove("over"); handler(Array.from(e.dataTransfer.files)); };
+  input.onchange = (e)=> handler(Array.from(e.target.files));
+}
+
+function bindSettingsInputs($){
+  const set = (patch)=> setState({settings: {...state.settings, ...patch}});
+  if($("fmtSelect")) $("fmtSelect").onchange = (e)=> set({format:e.target.value});
+  if($("sepSelect")) $("sepSelect").onchange = (e)=> set({separator: e.target.value === "\\t" ? "\t" : e.target.value});
+  if($("hdrCheck")) $("hdrCheck").onchange = (e)=> set({header:e.target.checked});
+  if($("ov_trim")) $("ov_trim").onchange = (e)=> set({trim:e.target.checked});
+  if($("ov_skipEmpty")) $("ov_skipEmpty").onchange = (e)=> set({skipEmpty:e.target.checked});
+  if($("ov_quoteText")) $("ov_quoteText").onchange = (e)=> set({quoteText:e.target.checked});
+  if($("ov_overrideDate")) $("ov_overrideDate").onchange = (e)=> set({overrideDate:e.target.checked});
+  if($("ov_dateFormat")) $("ov_dateFormat").onchange = (e)=> set({dateFormat:e.target.value});
+  if($("ov_overrideDecimals")) $("ov_overrideDecimals").onchange = (e)=> set({overrideDecimals:e.target.checked});
+  if($("ov_decimals")) $("ov_decimals").onchange = (e)=> set({decimals:Number(e.target.value)});
+  if($("ov_overrideCase")) $("ov_overrideCase").onchange = (e)=> set({overrideCase:e.target.checked});
+  if($("ov_caseValue")) $("ov_caseValue").onchange = (e)=> set({caseValue:e.target.value});
+  if($("ov_replaceEmpty")) $("ov_replaceEmpty").onchange = (e)=> set({replaceEmpty:e.target.checked});
+  if($("ov_replaceValue")) $("ov_replaceValue").onchange = (e)=> set({replaceValue:e.target.value});
+}
+
+/* ======================= ACTIONS ======================= */
+async function handleTargetFiles(files){
+  setState({error:""});
+  const file = files[0]; if(!file) return;
+  try{
+    const {headers, rows} = await parseFile(file);
+    if(!headers.length) throw new Error("No columns detected — make sure the file has a header row.");
+    if(rows.length<1) throw new Error("Upload a sample file with at least a couple of data rows so formatting can be detected.");
+    setState({ targetFileName: file.name, targetHeaders: headers, targetSampleRows: rows, formatRules: detectColumnRules(headers, rows) });
+  }catch(e){ setState({error: e.message}); }
+}
+
+async function handleInputFiles(files){
+  setState({error:""});
+  if(!files.length) return;
+  try{
+    let allHeaders=[], allRows=[];
+    for(const file of files){
+      const {headers, rows} = await parseFile(file);
+      allHeaders = Array.from(new Set([...allHeaders, ...headers]));
+      allRows = allRows.concat(rows);
+    }
+    setState({
+      inputFileNames: files.map(f=>f.name), inputHeaders: allHeaders, inputRows: allRows,
+      columnMap: autoMapTargets(state.targetHeaders, allHeaders)
+    });
+  }catch(e){ setState({error: e.message}); }
+}
+
+function runConversion(){
+  const rulesByCol = {}; state.formatRules.forEach(r=> rulesByCol[r.column]=r);
+  const out = convertRows(state.inputRows, state.columnMap, rulesByCol, state.settings, state.recodeRules);
+  state.result = {...out, total: state.inputRows.length};
+}
+
+function doDownload(){
+  const r = state.result; if(!r) return;
+  const ext = {CSV:"csv",TSV:"tsv",TXT:"txt",JSON:"json","Pipe-delimited":"txt"}[state.settings.format] || "txt";
+  const mime = state.settings.format==="JSON" ? "application/json" : "text/plain";
+  const text = generateOutputText(r.rows, r.columns, state.settings);
+  const name = `${(state.targetFileName||"output").replace(/\.[^/.]+$/,"")}_converted.${ext}`;
+  downloadText(text, name, mime);
+
+  const profile = {
+    name: state.profileName || `${state.targetFileName||"Profile"}_${new Date().toISOString().slice(0,10)}`,
+    date: new Date().toLocaleString(),
+    targetFileName: state.targetFileName, formatRules: state.formatRules, columnMap: state.columnMap, settings: state.settings, recodeRules: state.recodeRules,
+    lastInputFiles: state.inputFileNames, rowCount: r.rows.length,
+    status: r.rows.length ? "success" : "no rows"
+  };
+  const profiles = [profile, ...state.savedProfiles.filter(p=>p.name!==profile.name)].slice(0,30);
+  state.savedProfiles = profiles; saveProfilesToDisk();
+  render();
+}
+
+function resetAll(){
+  setState({
+    step:1, error:"", targetFileName:"", targetHeaders:[], targetSampleRows:[], formatRules:[],
+    inputFileNames:[], inputHeaders:[], inputRows:[], columnMap:[], recodeRules:[],
+    result:null, profileName:""
+  });
+}
+
+render();
+</script>
+</body>
+</html>
