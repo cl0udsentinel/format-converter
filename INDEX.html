@@ -71,21 +71,27 @@
 <div class="wrap" id="app"></div>
 
 <script>
+/* ======================= CONSTANTS ======================= */
+const STORAGE_KEY = "fc_profiles_v3";
+const MONTHS_UPPER = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
 /* ======================= STATE ======================= */
-const STORAGE_KEY = "fc_profiles_v1";
 let state = {
   step: 1, error: "",
   savedProfiles: JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"),
   targetFileName: "", targetHeaders: [], targetSampleRows: [], formatRules: [],
-  inputFileNames: [], inputHeaders: [], inputRows: [],
+  inputFileNames: [], inputHeaders: [], inputRows: [], inputFormatRules: [],
   columnMap: [], recodeRules: [],
   settings: { format:"CSV", separator:",", header:true, trim:false, skipEmpty:false, quoteText:false,
               overrideDate:false, dateFormat:"YYYY-MM-DD", overrideDecimals:false, decimals:2,
               overrideCase:false, caseValue:"Title", replaceEmpty:false, replaceValue:"" },
-  result: null, profileName: ""
+  result: null, profileName: "", converting: false
 };
 
-function setState(patch){ state = {...state, ...patch}; render(); }
+function setState(patch){
+  state = {...state, ...patch};
+  render();
+}
 function saveProfilesToDisk(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedProfiles)); }
 
 const STEPS = ["Start","Target format","Input file","Mapping","Output settings","Preview","Download"];
@@ -93,7 +99,6 @@ const STEPS = ["Start","Target format","Input file","Mapping","Output settings",
 /* ======================= PARSING ======================= */
 async function parseFile(file){
   const ext = file.name.toLowerCase().split(".").pop();
-
   if(["csv","tsv","txt"].includes(ext)){
     const text = await file.text();
     if(!text || !text.trim()) throw new Error(`"${file.name}" appears to be empty.`);
@@ -102,7 +107,6 @@ async function parseFile(file){
     if(!headers.length) throw new Error(`Couldn't find a header row in "${file.name}". Make sure the first line has column names.`);
     return { headers, rows: res.data || [] };
   }
-
   if(["xlsx","xls"].includes(ext)){
     let wb;
     try{
@@ -119,7 +123,6 @@ async function parseFile(file){
     if(!json.length) throw new Error(`The first sheet in "${file.name}" has no data rows.`);
     return { headers: Object.keys(json[0]), rows: json };
   }
-
   if(ext === "json"){
     const text = await file.text();
     let data;
@@ -131,42 +134,223 @@ async function parseFile(file){
     }
     return { headers: Object.keys(arr[0]), rows: arr };
   }
-
   if(ext === "pdf") throw new Error("PDF extraction isn't bundled here — export the PDF to CSV/Excel first, then upload that.");
   throw new Error(`Unsupported file type: ".${ext}". Use CSV, TSV, TXT, JSON, XLSX, or XLS.`);
 }
 
+/* ======================= DATE FORMAT INFERENCE ======================= */
+function parseDateWithFormat(str, format){
+  if(!str || !format) return null;
+  str = String(str).trim();
+  let si = 0, fi = 0;
+  let year, month, day, hour = 0, minute = 0, second = 0, ampm = null;
+  const tokenDefs = [
+    { name: 'YYYY', re: /^(\d{4})/, parse: m => parseInt(m[1]), set: v => year = v },
+    { name: 'MMM', re: /^([A-Za-z]{3})/, parse: m => MONTHS_UPPER.indexOf(m[1].toUpperCase()), set: v => month = v },
+    { name: 'MM', re: /^(\d{2})/, parse: m => parseInt(m[1]) - 1, set: v => month = v },
+    { name: 'M', re: /^(\d{1,2})/, parse: m => parseInt(m[1]) - 1, set: v => month = v },
+    { name: 'DD', re: /^(\d{2})/, parse: m => parseInt(m[1]), set: v => day = v },
+    { name: 'D', re: /^(\d{1,2})/, parse: m => parseInt(m[1]), set: v => day = v },
+    { name: 'HH', re: /^(\d{2})/, parse: m => parseInt(m[1]), set: v => hour = v },
+    { name: 'H', re: /^(\d{1,2})/, parse: m => parseInt(m[1]), set: v => hour = v },
+    { name: 'hh', re: /^(\d{2})/, parse: m => parseInt(m[1]), set: v => hour = v },
+    { name: 'h', re: /^(\d{1,2})/, parse: m => parseInt(m[1]), set: v => hour = v },
+    { name: 'mm', re: /^(\d{2})/, parse: m => parseInt(m[1]), set: v => minute = v },
+    { name: 'm', re: /^(\d{1,2})/, parse: m => parseInt(m[1]), set: v => minute = v },
+    { name: 'ss', re: /^(\d{2})/, parse: m => parseInt(m[1]), set: v => second = v },
+    { name: 's', re: /^(\d{1,2})/, parse: m => parseInt(m[1]), set: v => second = v },
+    { name: 'A', re: /^(AM|PM)/i, parse: m => m[1].toUpperCase(), set: v => ampm = v },
+    { name: 'a', re: /^(am|pm)/i, parse: m => m[1].toLowerCase(), set: v => ampm = v },
+  ];
+  while(fi < format.length && si < str.length){
+    let token = null;
+    const remaining = format.slice(fi);
+    for(const def of tokenDefs){
+      if(remaining.startsWith(def.name)){
+        const m = str.slice(si).match(def.re);
+        if(!m) return null;
+        const val = def.parse(m);
+        if(val === null || val === undefined) return null;
+        if(def.name === 'MMM' && (val < 0 || val > 11)) return null;
+        if((def.name === 'DD' || def.name === 'D') && (val < 1 || val > 31)) return null;
+        if((def.name === 'MM' || def.name === 'M') && (val < 0 || val > 11)) return null;
+        if((def.name === 'HH' || def.name === 'H') && (val < 0 || val > 23)) return null;
+        if((def.name === 'hh' || def.name === 'h') && (val < 1 || val > 12)) return null;
+        if((def.name === 'mm' || def.name === 'm') && (val < 0 || val > 59)) return null;
+        if((def.name === 'ss' || def.name === 's') && (val < 0 || val > 59)) return null;
+        def.set(val);
+        si += m[0].length;
+        fi += def.name.length;
+        token = def.name;
+        break;
+      }
+    }
+    if(!token){
+      if(str[si] !== format[fi]) return null;
+      si++; fi++;
+    }
+  }
+  if(ampm === 'PM' && hour < 12) hour += 12;
+  if(ampm === 'AM' && hour === 12) hour = 0;
+  if(year === undefined || month === undefined || day === undefined) return null;
+  if(month < 0 || month > 11) return null;
+  if(day < 1 || day > 31) return null;
+  const d = new Date(year, month, day, hour, minute, second);
+  if(isNaN(d.getTime()) || d.getMonth() !== month || d.getDate() !== day) return null;
+  return d;
+}
+
+function formatDateWithFormat(date, format, monthCase){
+  if(!date || !format) return '';
+  const pad2 = n => String(n).padStart(2, '0');
+  const monthIdx = date.getMonth();
+  let monthAbbr = MONTHS_UPPER[monthIdx];
+  if(monthCase === 'lower') monthAbbr = monthAbbr.toLowerCase();
+  else if(monthCase === 'title') monthAbbr = monthAbbr[0] + monthAbbr.slice(1).toLowerCase();
+  const map = {
+    'YYYY': String(date.getFullYear()), 'YY': String(date.getFullYear()).slice(-2),
+    'MMM': monthAbbr, 'MM': pad2(monthIdx + 1), 'M': String(monthIdx + 1),
+    'DD': pad2(date.getDate()), 'D': String(date.getDate()),
+    'HH': pad2(date.getHours()), 'H': String(date.getHours()),
+    'hh': pad2(date.getHours() % 12 || 12), 'h': String(date.getHours() % 12 || 12),
+    'mm': pad2(date.getMinutes()), 'm': String(date.getMinutes()),
+    'ss': pad2(date.getSeconds()), 's': String(date.getSeconds()),
+    'A': date.getHours() >= 12 ? 'PM' : 'AM', 'a': date.getHours() >= 12 ? 'pm' : 'am',
+  };
+  let result = format;
+  const tokens = Object.keys(map).sort((a, b) => b.length - a.length);
+  for(const tok of tokens){ result = result.split(tok).join(map[tok]); }
+  return result;
+}
+
+function buildFormatString(s){
+  let format = '', i = 0;
+  let dateTokens = { day: false, month: false, year: false };
+  let timeTokens = { hour: false, minute: false, second: false };
+  const hasAmPm = /\b[AP]M\b/i.test(s);
+  while(i < s.length){
+    const ch = s[i];
+    if(/[A-Za-z]/.test(ch)){
+      const word = s.slice(i).match(/^[A-Za-z]+/)?.[0];
+      if(!word) return null;
+      const upper = word.toUpperCase();
+      if(word.length === 3 && MONTHS_UPPER.includes(upper)){
+        format += 'MMM'; dateTokens.month = true; i += 3;
+      } else if(upper === 'AM' || upper === 'PM'){
+        format += 'A'; i += word.length;
+      } else { return null; }
+      continue;
+    }
+    if(/\d/.test(ch)){
+      const numStr = s.slice(i).match(/^\d+/)?.[0];
+      const len = numStr.length;
+      const num = parseInt(numStr);
+      const rest = s.slice(i + len);
+      const isTime = rest.match(/^[:.]/) || format.match(/[Hhms:]$/) || timeTokens.hour;
+      if(isTime){
+        if(!timeTokens.hour){
+          format += (len === 2 ? (hasAmPm ? 'hh' : 'HH') : (hasAmPm ? 'h' : 'H'));
+          timeTokens.hour = true;
+        } else if(!timeTokens.minute){
+          format += (len === 2 ? 'mm' : 'm'); timeTokens.minute = true;
+        } else if(!timeTokens.second){
+          format += (len === 2 ? 'ss' : 's'); timeTokens.second = true;
+        } else { format += 'HH'; }
+      } else {
+        if(len === 4 && num >= 1000 && !dateTokens.year){
+          format += 'YYYY'; dateTokens.year = true;
+        } else if(len === 2){
+          const nextNumMatch = rest.match(/\d+/);
+          if(nextNumMatch && num <= 12){
+            const nextNum = parseInt(nextNumMatch[0]);
+            if(nextNum > 12 && nextNum <= 31 && !dateTokens.month){
+              format += 'MM'; dateTokens.month = true; i += len; continue;
+            }
+          }
+          if(!dateTokens.day && num >= 1 && num <= 31){
+            format += 'DD'; dateTokens.day = true;
+          } else if(!dateTokens.month && num >= 1 && num <= 12){
+            format += 'MM'; dateTokens.month = true;
+          } else if(!dateTokens.year){
+            format += 'YY'; dateTokens.year = true;
+          } else { format += 'DD'; }
+        } else if(len === 1){
+          if(!dateTokens.day && num >= 1 && num <= 9){
+            format += 'D'; dateTokens.day = true;
+          } else if(!dateTokens.month && num >= 1 && num <= 9){
+            format += 'M'; dateTokens.month = true;
+          } else { format += 'D'; }
+        } else { format += 'Y'.repeat(len); dateTokens.year = true; }
+      }
+      i += len; continue;
+    }
+    format += ch; i++;
+  }
+  return format;
+}
+
+function inferDateFormat(samples){
+  if(!samples || samples.length === 0) return null;
+  const checkSamples = samples.slice(0, 100);
+  const format = buildFormatString(checkSamples[0]);
+  if(!format) return null;
+  const matchCount = checkSamples.filter(s => parseDateWithFormat(s, format) !== null).length;
+  if(matchCount / checkSamples.length >= 0.8) return format;
+  return null;
+}
+
+function detectMonthCase(values){
+  const months = values.map(v => {
+    const m = String(v).match(/[A-Za-z]{3}/);
+    return m ? m[0] : null;
+  }).filter(Boolean);
+  if(months.length === 0) return 'upper';
+  const allUpper = months.every(m => m === m.toUpperCase());
+  const allLower = months.every(m => m === m.toLowerCase());
+  if(allLower) return 'lower';
+  if(allUpper) return 'upper';
+  return 'title';
+}
+
 /* ======================= FORMAT DETECTION ======================= */
 const DATE_PATTERNS = [
-  {re:/^\d{4}-\d{2}-\d{2}$/, label:"YYYY-MM-DD", key:"YYYY-MM-DD"},
-  {re:/^\d{2}\/\d{2}\/\d{4}$/, label:"DD/MM/YYYY", key:"DD/MM/YYYY"},
-  {re:/^\d{2}-\d{2}-\d{4}$/, label:"MM-DD-YYYY", key:"MM-DD-YYYY"},
-  {re:/^\d{2}\/\d{2}\/\d{2}$/, label:"DD/MM/YY", key:"DD/MM/YY"},
-  {re:/^\d{1,2}\s[A-Za-z]{3}\s\d{4}$/, label:"DD MMM YYYY", key:"DD MMM YYYY"},
-  {re:/^\d{8}$/, label:"MMDDYYYY (no separator)", key:"MMDDYYYY"},
-  {re:/^\d{10}$/, label:"Unix timestamp (seconds)", key:"UNIX_S"},
-  {re:/^\d{13}$/, label:"Unix timestamp (ms)", key:"UNIX_MS"},
+  {re:/^\d{4}-\d{2}-\d{2}$/, label:"YYYY-MM-DD", format:"YYYY-MM-DD"},
+  {re:/^\d{2}\/\d{2}\/\d{4}$/, label:"DD/MM/YYYY", format:"DD/MM/YYYY"},
+  {re:/^\d{2}-\d{2}-\d{4}$/, label:"MM-DD-YYYY", format:"MM-DD-YYYY"},
+  {re:/^\d{2}\/\d{2}\/\d{2}$/, label:"DD/MM/YY", format:"DD/MM/YY"},
+  {re:/^\d{1,2}\s[A-Za-z]{3}\s\d{4}$/, label:"DD MMM YYYY", format:"DD MMM YYYY"},
+  {re:/^\d{10}$/, label:"Unix timestamp (seconds)", format:"UNIX_S"},
+  {re:/^\d{13}$/, label:"Unix timestamp (ms)", format:"UNIX_MS"},
 ];
+
 function detectDate(values){
   if(!values.length) return null;
+  const inferred = inferDateFormat(values);
+  if(inferred){
+    return { label: inferred, key: inferred, inferredFormat: inferred, monthCase: detectMonthCase(values) };
+  }
   for(const p of DATE_PATTERNS){
-    const m = values.filter(v=>p.re.test(v.trim())).length;
-    if(m/values.length >= 0.8) return {label:p.label, key:p.key};
+    const m = values.filter(v => p.re.test(v.trim())).length;
+    if(m / values.length >= 0.8){
+      return { label: p.label, key: p.format, inferredFormat: p.format, monthCase: 'upper' };
+    }
   }
   return null;
 }
+
 function mostCommon(arr){ const c={}; arr.forEach(v=>c[v]=(c[v]||0)+1); return Number(Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]); }
+
 function detectNumber(values){
   if(!values.length) return null;
-  const re = /^[\-(]?[$€£₹]?\s?[\d.,\s]+\)?%?$/;
+  const re = /^[\-(]?[$\u20ac\u00a3\u20b9]?\s?[\d.,\s]+\)?%?$/;
   const numeric = values.filter(v=>re.test(v.trim()) && /\d/.test(v));
   if(numeric.length === 0 || numeric.length/values.length < 0.8) return null;
   const decCounts = numeric.map(v=>{ const c=v.replace(/[^\d.,]/g,""); const m=c.match(/[.,](\d+)$/); return m?m[1].length:0; });
   const decimals = mostCommon(decCounts);
   const hasThousands = numeric.some(v=>/\d[.,]\d{3}\b/.test(v));
-  const curMatch = values.find(v=>/[$€£₹]/.test(v));
-  const currencySymbol = curMatch ? curMatch.match(/[$€£₹]/)[0] : null;
-  const currencyPrefix = curMatch ? /^[$€£₹]/.test(curMatch.trim()) : null;
+  const curMatch = values.find(v=>/[$\u20ac\u00a3\u20b9]/.test(v));
+  const currencySymbol = curMatch ? curMatch.match(/[$\u20ac\u00a3\u20b9]/)[0] : null;
+  const currencyPrefix = curMatch ? /^[$\u20ac\u00a3\u20b9]/.test(curMatch.trim()) : null;
   const negParen = values.some(v=>/^\(.*\)$/.test(v.trim()));
   const zeroPadded = values.length>0 && values.every(v=>/^0\d/.test(v.trim()));
   let label = decimals + " decimal place" + (decimals===1?"":"s");
@@ -176,12 +360,13 @@ function detectNumber(values){
   if(zeroPadded) label += ", zero-padded";
   return {label, decimals, hasThousands, currencySymbol, currencyPrefix, negParen, zeroPadded};
 }
+
 function detectText(values){
   if(!values.length) return {label:"Mixed case"};
   const letters = values.filter(v=>/[A-Za-z]/.test(v));
   const isUpper = letters.length>0 && letters.every(v=>v===v.toUpperCase());
   const isLower = letters.length>0 && letters.every(v=>v===v.toLowerCase());
-  const isTitle = letters.length>0 && letters.every(v=>v.split(/\s+/).every(w=>!w[0]||w[0]===w[0].toUpperCase()));
+  const isTitle = letters.length>0 && letters.every(v=>v.split(/\s+/).filter(Boolean).every(w=>w[0]===w[0].toUpperCase() && w.slice(1)===w.slice(1).toLowerCase()));
   const lens = new Set(values.map(v=>v.length));
   const fixedLength = lens.size===1 ? values[0].length : null;
   const trailingSpace = values.some(v=>/\s$/.test(v));
@@ -193,15 +378,11 @@ function detectText(values){
   if(leadingSpace) label += ", left-padded with spaces";
   return {label, isUpper, isLower, isTitle, fixedLength, leadingSpace, trailingSpace};
 }
+
 function detectNullRepr(rows, col){
   const rawCells = rows.map(r=>r[col]);
-  // explicit textual markers like "N/A", "NULL", "-" take priority
   const tokenBlank = rawCells.find(v=>typeof v==="string" && ["N/A","NA","NULL","n/a","null","-"].includes(v.trim()));
-  if(tokenBlank !== undefined){
-    const t = tokenBlank.trim();
-    return { raw: t, display: t };
-  }
-  // otherwise look for a logically-empty cell and preserve its exact raw content (could be "", "   ", etc.)
+  if(tokenBlank !== undefined){ const t = tokenBlank.trim(); return { raw: t, display: t }; }
   const whitespaceBlank = rawCells.find(v=> v===undefined || v===null || (typeof v==="string" && v.trim()===""));
   if(whitespaceBlank !== undefined){
     const raw = (whitespaceBlank===undefined || whitespaceBlank===null) ? "" : String(whitespaceBlank);
@@ -210,6 +391,7 @@ function detectNullRepr(rows, col){
   }
   return null;
 }
+
 function detectColumnRules(headers, rows){
   return headers.map(col=>{
     const raw = rows.map(r=>r[col]).filter(v=>v!==undefined && v!==null && String(v).trim()!=="");
@@ -265,59 +447,103 @@ function statusLabel(s){ return s==="matched" ? "Resolved" : s==="review" ? "Rev
 
 /* ======================= FORMATTING / OUTPUT ======================= */
 function pad2(n){ return String(n).padStart(2,"0"); }
-function parseLooseDate(v){ const d=new Date(v); return isNaN(d.getTime())?null:d; }
-function formatDateByPattern(d, pattern){
-  const map = { YYYY:d.getFullYear(), YY:String(d.getFullYear()).slice(-2), MM:pad2(d.getMonth()+1), DD:pad2(d.getDate()), MMM:d.toLocaleString("en-US",{month:"short"}) };
-  let out = pattern || "YYYY-MM-DD";
-  return out.replace("YYYY",map.YYYY).replace("MMM",map.MMM).replace("MM",map.MM).replace("DD",map.DD).replace("YY",map.YY);
+
+function parseLooseDate(v){
+  if(typeof v === "number") { const d = new Date(v); return isNaN(d.getTime()) ? null : d; }
+  if(typeof v !== "string" || !v.trim()) return null;
+  if(!/\d/.test(v) || (!/[\-\/\s:]/.test(v) && v.length < 6)) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
 }
+
 function applyCase(v,mode){
   if(mode==="UPPER") return v.toUpperCase();
   if(mode==="lower") return v.toLowerCase();
   if(mode==="Title") return v.replace(/\w\S*/g, t=>t[0].toUpperCase()+t.slice(1).toLowerCase());
   return v;
 }
-function applyFormatting(value, rule, ov){
+
+function applyFormatting(value, targetRule, inputRule, ov){
   let v = value===undefined||value===null ? "" : String(value);
   if(v.trim()===""){
     if(ov.replaceEmpty && ov.replaceValue) return ov.replaceValue;
-    if(rule && rule.nullRule){
-      let fill = rule.nullRule.raw;
+    if(targetRule && targetRule.nullRule){
+      let fill = targetRule.nullRule.raw;
       if(ov.trim) fill = fill.trim();
       return fill;
     }
     return "";
   }
   if(ov.trim) v = v.trim();
-  if((rule && rule.type==="Number") || ov.overrideDecimals){
-    const num = parseFloat(v.replace(/[^0-9.\-]/g,""));
-    if(!isNaN(num)){
-      const decimals = ov.overrideDecimals ? ov.decimals : (rule && rule.detail && rule.detail.decimals!=null ? rule.detail.decimals : 2);
-      v = num.toFixed(decimals);
-      if(rule && rule.detail && rule.detail.hasThousands){
-        const parts = v.split("."); parts[0]=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,","); v=parts.join(".");
+
+  if((targetRule && targetRule.type==="Number") || ov.overrideDecimals){
+    const numStr = v.replace(/[^0-9.\-]/g,"");
+    const dotCount = (numStr.match(/\./g) || []).length;
+    if(dotCount <= 1){
+      const num = parseFloat(numStr);
+      if(!isNaN(num)){
+        const decimals = ov.overrideDecimals ? ov.decimals : (targetRule && targetRule.detail && targetRule.detail.decimals!=null ? targetRule.detail.decimals : 2);
+        v = num.toFixed(decimals);
+        if(targetRule && targetRule.detail && targetRule.detail.hasThousands){
+          const parts = v.split("."); parts[0]=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,","); v=parts.join(".");
+        }
       }
     }
-  } else if((rule && rule.type==="Date") || ov.overrideDate){
-    const d = parseLooseDate(v);
-    if(d) v = formatDateByPattern(d, ov.overrideDate ? ov.dateFormat : ((rule&&rule.detail&&rule.detail.key)||(rule&&rule.rule)));
+  } else if((targetRule && targetRule.type==="Date") || ov.overrideDate){
+    let d;
+    const inputFormat = inputRule?.detail?.inferredFormat;
+    if(typeof value === 'object' && value instanceof Date){
+      d = value;
+    } else if(inputFormat === 'UNIX_S'){
+      d = new Date(parseInt(v) * 1000);
+    } else if(inputFormat === 'UNIX_MS'){
+      d = new Date(parseInt(v));
+    } else if(inputFormat){
+      d = parseDateWithFormat(v, inputFormat);
+    } else {
+      d = parseLooseDate(v);
+    }
+    if(d && !isNaN(d.getTime())){
+      const fmt = ov.overrideDate ? ov.dateFormat : (targetRule?.detail?.inferredFormat || "YYYY-MM-DD");
+      if(fmt === 'UNIX_S'){
+        v = String(Math.floor(d.getTime() / 1000));
+      } else if(fmt === 'UNIX_MS'){
+        v = String(d.getTime());
+      } else {
+        const monthCase = targetRule?.detail?.monthCase || 'upper';
+        v = formatDateWithFormat(d, fmt, monthCase);
+      }
+    }
   } else {
     if(ov.overrideCase) v = applyCase(v, ov.caseValue);
-    else if(rule && rule.detail && rule.detail.isUpper) v = v.toUpperCase();
-    else if(rule && rule.detail && rule.detail.isLower) v = v.toLowerCase();
-    else if(rule && rule.detail && rule.detail.isTitle) v = applyCase(v,"Title");
+    else if(targetRule && targetRule.detail && targetRule.detail.isUpper) v = v.toUpperCase();
+    else if(targetRule && targetRule.detail && targetRule.detail.isLower) v = v.toLowerCase();
+    else if(targetRule && targetRule.detail && targetRule.detail.isTitle) v = applyCase(v,"Title");
   }
-  if(ov.quoteText && !(rule && rule.type==="Number")) v = `"${v}"`;
+  // Issue 3: Fixed-length padding — pad with trailing spaces to match target format
+  if(targetRule && targetRule.type === "Text" && targetRule.detail && targetRule.detail.fixedLength){
+    const targetLen = targetRule.detail.fixedLength;
+    if(v.length < targetLen){
+      // Pad with trailing spaces to match target length (preserving leading spaces if detected)
+      v = v.padEnd(targetLen, ' ');
+    } else if(v.length > targetLen && !ov.quoteText){
+      // Truncate if longer than target (unless quoted text needs full content)
+      v = v.slice(0, targetLen);
+    }
+  }
+  if(ov.quoteText && !(targetRule && targetRule.type==="Number")) v = `\"${v}\"`;
   return v;
 }
-function convertRows(inputRows, columnMap, rulesByCol, ov, recodeRules){
+
+function convertRows(inputRows, columnMap, targetRulesByCol, inputRulesByCol, ov, recodeRules){
   let skipped=0; const blankCounts={};
   const activeCols = columnMap.filter(c=>c.action!=="skip");
   const rows = inputRows.map(row=>{
     if(ov.skipEmpty && Object.values(row).every(v=>String(v??"").trim()==="")){ skipped++; return null; }
     const out = {};
     activeCols.forEach(c=>{
-      const rule = rulesByCol[c.targetColumn];
+      const targetRule = targetRulesByCol[c.targetColumn];
+      const inputRule = c.action==="map" ? inputRulesByCol[c.inputColumn] : null;
       let val;
       if(c.action==="map"){
         const rawVal = row[c.inputColumn];
@@ -325,14 +551,13 @@ function convertRows(inputRows, columnMap, rulesByCol, ov, recodeRules){
         const recode = (recodeRules||[]).find(rr=>rr.column===c.targetColumn && String(rr.find).trim()===rawStr);
         if(recode){
           val = ov.trim ? String(recode.replace).trim() : recode.replace;
-          if(ov.quoteText) val = `"${val}"`;
         } else {
-          val = applyFormatting(rawVal, rule, ov);
+          val = applyFormatting(rawVal, targetRule, inputRule, ov);
         }
       }
-      else if(c.action==="sample") val = ov.trim ? String(c.sampleValue||"").trim() : (c.sampleValue||"");
-      else if(c.action==="default") val = ov.trim ? String(c.defaultValue||"").trim() : (c.defaultValue||"");
-      else if(c.action==="blank") val = applyFormatting("", rule, ov);
+      else if(c.action==="sample") val = applyFormatting(c.sampleValue||"", targetRule, null, ov);
+      else if(c.action==="default") val = applyFormatting(c.defaultValue||"", targetRule, null, ov);
+      else if(c.action==="blank") val = applyFormatting("", targetRule, null, ov);
       else val = "";
       out[c.targetColumn] = val;
       if(String(val).trim()==="") blankCounts[c.targetColumn]=(blankCounts[c.targetColumn]||0)+1;
@@ -341,14 +566,24 @@ function convertRows(inputRows, columnMap, rulesByCol, ov, recodeRules){
   }).filter(Boolean);
   return {rows, skipped, blankCounts, columns: activeCols.map(c=>c.targetColumn)};
 }
+
+function escapeCsvField(value, sep){
+  const str = String(value);
+  if(str.includes('"') || str.includes(sep) || str.includes("\n") || str.includes("\r")){
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
 function generateOutputText(rows, columns, settings){
   if(settings.format==="JSON") return JSON.stringify(rows, null, 2);
   const sep = settings.separator;
   const lines = [];
-  if(settings.header) lines.push(columns.join(sep));
-  rows.forEach(r=>lines.push(columns.map(c=>r[c]).join(sep)));
+  if(settings.header) lines.push(columns.map(c=>escapeCsvField(c, sep)).join(sep));
+  rows.forEach(r=>lines.push(columns.map(c=>escapeCsvField(r[c]??"", sep)).join(sep)));
   return lines.join("\n");
 }
+
 function downloadText(content, filename, mime){
   const blob = new Blob([content], {type:mime});
   const url = URL.createObjectURL(blob);
@@ -362,6 +597,26 @@ function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").rep
 
 function render(){
   const app = document.getElementById("app");
+  const activeEl = document.activeElement;
+  let focusRestore = null;
+  let focusRect = null;
+  if(activeEl && activeEl !== document.body && (activeEl.tagName === 'SELECT' || activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')){
+    const ds = activeEl.dataset;
+    if(ds.colAction !== undefined) focusRestore = `[data-col-action="${ds.colAction}"]`;
+    else if(ds.colInput !== undefined) focusRestore = `[data-col-input="${ds.colInput}"]`;
+    else if(ds.colSample !== undefined) focusRestore = `[data-col-sample="${ds.colSample}"]`;
+    else if(ds.colDefault !== undefined) focusRestore = `[data-col-default="${ds.colDefault}"]`;
+    else if(ds.ruleEdit !== undefined) focusRestore = `[data-rule-edit="${ds.ruleEdit}"]`;
+    else if(ds.recodeCol !== undefined) focusRestore = `[data-recode-col="${ds.recodeCol}"]`;
+    else if(ds.recodeFind !== undefined) focusRestore = `[data-recode-find="${ds.recodeFind}"]`;
+    else if(ds.recodeReplace !== undefined) focusRestore = `[data-recode-replace="${ds.recodeReplace}"]`;
+    else if(activeEl.id) focusRestore = `#${CSS.escape(activeEl.id)}`;
+    // Save element's position relative to viewport for robust scroll restoration
+    if(focusRestore){
+      const rect = activeEl.getBoundingClientRect();
+      focusRect = { top: rect.top, left: rect.left };
+    }
+  }
   const scrollY = window.scrollY;
   app.innerHTML = `
     <div class="top">
@@ -374,7 +629,29 @@ function render(){
     ${state.step < 7 ? renderFooterNav() : ""}
   `;
   bindEvents();
-  window.scrollTo(0, scrollY);
+  if((state.step === 4 || state.step === 5) && focusRestore){
+    const el = document.querySelector(focusRestore);
+    if(el){
+      // Robust scroll-preserving focus: save scroll, focus, then restore scroll
+      const beforeScrollY = window.scrollY;
+      const beforeScrollX = window.scrollX;
+      el.focus();
+      // Force restore scroll position - works across all browsers
+      requestAnimationFrame(() => {
+        window.scrollTo(beforeScrollX, beforeScrollY);
+        // If element was visible before, try to keep it in same viewport position
+        if(focusRect){
+          const newRect = el.getBoundingClientRect();
+          const deltaY = newRect.top - focusRect.top;
+          if(Math.abs(deltaY) > 2){
+            window.scrollBy(0, -deltaY);
+          }
+        }
+      });
+    }
+  } else {
+    window.scrollTo(window.scrollX, scrollY);
+  }
 }
 
 function renderProgress(){
@@ -401,9 +678,7 @@ function renderFooterNav(){
 function canGoNext(){
   if(state.step===2) return state.targetHeaders.length>0;
   if(state.step===3) return state.inputRows.length>0;
-  if(state.step===4){
-    return state.columnMap.every(c => columnStatus(c) === "matched");
-  }
+  if(state.step===4) return state.columnMap.every(c => columnStatus(c) === "matched");
   return true;
 }
 
@@ -419,7 +694,6 @@ function renderStep(){
   }
 }
 
-/* ---- Step 1 ---- */
 function step1(){
   const profiles = state.savedProfiles;
   return `
@@ -443,7 +717,6 @@ function step1(){
   `;
 }
 
-/* ---- Step 2 ---- */
 function step2(){
   return `
     <h2>Upload the target/sample format file</h2>
@@ -470,7 +743,6 @@ function step2(){
   `;
 }
 
-/* ---- Step 3 ---- */
 function step3(){
   const headers = state.inputHeaders, rows = state.inputRows;
   return `
@@ -487,7 +759,6 @@ function step3(){
   `;
 }
 
-/* ---- Step 4 ---- */
 function step4(){
   const usedInputs = new Set(state.columnMap.filter(c=>c.action==="map" && c.inputColumn).map(c=>c.inputColumn));
   const unusedInputs = state.inputHeaders.filter(h=>!usedInputs.has(h));
@@ -539,10 +810,15 @@ function step4(){
   `;
 }
 
-/* ---- Step 5 ---- */
 function step5(){
   const s = state.settings;
-  const sepLabels = {",":"Comma","|":"Pipe","\t":"Tab",";":"Semicolon"};
+  const sepOptions = [
+    {v:",", l:"Comma"},
+    {v:"|", l:"Pipe"},
+    {v:"\\t", l:"Tab"},
+    {v:";", l:"Semicolon"}
+  ];
+  const currentSep = s.separator === "\t" ? "\\t" : s.separator;
   return `
     <h2>Output format & settings</h2>
     <div class="grid2">
@@ -553,7 +829,7 @@ function step5(){
       ${s.format!=="JSON" ? `
       <div>
         <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Separator</label>
-        <select id="sepSelect" style="width:100%">${Object.entries(sepLabels).map(([v,l])=>`<option value='${v==="\t"?"\\t":v}' ${s.separator===v?"selected":""}>${l}</option>`).join("")}</select>
+        <select id="sepSelect" style="width:100%">${sepOptions.map(opt=>`<option value="${opt.v}" ${currentSep===opt.v?"selected":""}>${opt.l}</option>`).join("")}</select>
       </div>
       <div><label class="row"><input type="checkbox" id="hdrCheck" ${s.header?"checked":""}/> Include header row</label></div>
       ` : ""}
@@ -591,8 +867,8 @@ function step5(){
   `;
 }
 
-/* ---- Step 6 ---- */
 function step6(){
+  if(state.converting) return `<p style="color:#94a3b8;font-style:italic;">Running conversion…</p>`;
   const r = state.result;
   if(!r) return `<p style="color:#94a3b8;font-style:italic;">Running conversion…</p>`;
   return `
@@ -608,7 +884,6 @@ function step6(){
   `;
 }
 
-/* ---- Step 7 ---- */
 function step7(){
   const defaultName = `${(state.targetFileName||"Profile").replace(/\.[^/.]+$/,"")}_${new Date().toISOString().slice(0,10)}`;
   return `
@@ -632,7 +907,17 @@ function bindEvents(){
   if($("backBtn")) $("backBtn").onclick = ()=> setState({step: Math.max(1, state.step-1)});
   if($("nextBtn")) $("nextBtn").onclick = async ()=>{
     setState({error:""});
-    if(state.step===5){ runConversion(); }
+    if(state.step===5){
+      setState({converting: true});
+      await new Promise(r=>setTimeout(r, 50));
+      const targetRulesByCol = {};
+      state.formatRules.forEach(r => targetRulesByCol[r.column] = r);
+      const inputRulesByCol = {};
+      state.inputFormatRules.forEach(r => inputRulesByCol[r.column] = r);
+      const out = convertRows(state.inputRows, state.columnMap, targetRulesByCol, inputRulesByCol, state.settings, state.recodeRules);
+      setState({result: {...out, total: state.inputRows.length}, converting: false, step: 6});
+      return;
+    }
     setState({step: Math.min(7, state.step+1)});
   };
 
@@ -657,7 +942,7 @@ function bindEvents(){
         targetFileName: p.targetFileName, formatRules: p.formatRules,
         targetHeaders: p.formatRules.map(r=>r.column),
         columnMap: p.columnMap, settings: p.settings, recodeRules: p.recodeRules || [],
-        step: 2
+        step: 2, inputFileNames: [], inputHeaders: [], inputRows: [], inputFormatRules: []
       });
     };
   });
@@ -749,9 +1034,9 @@ function bindEvents(){
   });
 
   // Step 7
-  if($("profileNameInput")) $("profileNameInput").oninput = (e)=> state.profileName = e.target.value;
+  if($("profileNameInput")) $("profileNameInput").oninput = (e)=> setState({profileName: e.target.value});
   if($("downloadBtn")) $("downloadBtn").onclick = doDownload;
-  if($("anotherBtn")) $("anotherBtn").onclick = ()=> setState({step:3});
+  if($("anotherBtn")) $("anotherBtn").onclick = ()=> setState({step:3, inputFileNames:[], inputHeaders:[], inputRows:[], inputFormatRules:[], result:null});
   if($("newBtn")) $("newBtn").onclick = resetAll;
   if($("dashBtn")) $("dashBtn").onclick = ()=> setState({step:1});
 }
@@ -769,7 +1054,10 @@ function setupDrop(dropId, inputId, handler){
 function bindSettingsInputs($){
   const set = (patch)=> setState({settings: {...state.settings, ...patch}});
   if($("fmtSelect")) $("fmtSelect").onchange = (e)=> set({format:e.target.value});
-  if($("sepSelect")) $("sepSelect").onchange = (e)=> set({separator: e.target.value === "\\t" ? "\t" : e.target.value});
+  if($("sepSelect")) $("sepSelect").onchange = (e)=>{
+    const val = e.target.value;
+    set({separator: val === "\\t" ? "\t" : val});
+  };
   if($("hdrCheck")) $("hdrCheck").onchange = (e)=> set({header:e.target.checked});
   if($("ov_trim")) $("ov_trim").onchange = (e)=> set({trim:e.target.checked});
   if($("ov_skipEmpty")) $("ov_skipEmpty").onchange = (e)=> set({skipEmpty:e.target.checked});
@@ -791,7 +1079,7 @@ async function handleTargetFiles(files){
   try{
     const {headers, rows} = await parseFile(file);
     if(!headers.length) throw new Error("No columns detected — make sure the file has a header row.");
-    if(rows.length<1) throw new Error("Upload a sample file with at least a couple of data rows so formatting can be detected.");
+    if(rows.length < 2) throw new Error("Upload a sample file with at least a couple of data rows so formatting can be detected.");
     setState({ targetFileName: file.name, targetHeaders: headers, targetSampleRows: rows, formatRules: detectColumnRules(headers, rows) });
   }catch(e){ setState({error: e.message}); }
 }
@@ -808,33 +1096,29 @@ async function handleInputFiles(files){
     }
     setState({
       inputFileNames: files.map(f=>f.name), inputHeaders: allHeaders, inputRows: allRows,
+      inputFormatRules: detectColumnRules(allHeaders, allRows),
       columnMap: autoMapTargets(state.targetHeaders, allHeaders)
     });
   }catch(e){ setState({error: e.message}); }
 }
 
-function runConversion(){
-  const rulesByCol = {}; state.formatRules.forEach(r=> rulesByCol[r.column]=r);
-  const out = convertRows(state.inputRows, state.columnMap, rulesByCol, state.settings, state.recodeRules);
-  state.result = {...out, total: state.inputRows.length};
-}
-
 function doDownload(){
   const r = state.result; if(!r) return;
   const ext = {CSV:"csv",TSV:"tsv",TXT:"txt",JSON:"json","Pipe-delimited":"txt"}[state.settings.format] || "txt";
-  const mime = state.settings.format==="JSON" ? "application/json" : "text/plain";
+  const mime = state.settings.format==="JSON" ? "application/json" : "text/csv";
   const text = generateOutputText(r.rows, r.columns, state.settings);
   const name = `${(state.targetFileName||"output").replace(/\.[^/.]+$/,"")}_converted.${ext}`;
   downloadText(text, name, mime);
 
   const profile = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2),
     name: state.profileName || `${state.targetFileName||"Profile"}_${new Date().toISOString().slice(0,10)}`,
     date: new Date().toLocaleString(),
     targetFileName: state.targetFileName, formatRules: state.formatRules, columnMap: state.columnMap, settings: state.settings, recodeRules: state.recodeRules,
     lastInputFiles: state.inputFileNames, rowCount: r.rows.length,
     status: r.rows.length ? "success" : "no rows"
   };
-  const profiles = [profile, ...state.savedProfiles.filter(p=>p.name!==profile.name)].slice(0,30);
+  const profiles = [profile, ...state.savedProfiles.filter(p=>p.id!==profile.id)].slice(0,30);
   state.savedProfiles = profiles; saveProfilesToDisk();
   render();
 }
@@ -842,8 +1126,8 @@ function doDownload(){
 function resetAll(){
   setState({
     step:1, error:"", targetFileName:"", targetHeaders:[], targetSampleRows:[], formatRules:[],
-    inputFileNames:[], inputHeaders:[], inputRows:[], columnMap:[], recodeRules:[],
-    result:null, profileName:""
+    inputFileNames:[], inputHeaders:[], inputRows:[], inputFormatRules:[], columnMap:[], recodeRules:[],
+    result:null, profileName:"", converting: false
   });
 }
 
