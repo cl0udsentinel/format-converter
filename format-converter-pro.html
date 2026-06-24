@@ -1,0 +1,1926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Format Converter Pro — Local</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/encoding-japanese@2.2.0/encoding.min.js"></script>
+<style>
+  :root{ --ink:#1e293b; --muted:#64748b; --line:#e2e8f0; --accent:#4f46e5; --accent-d:#4338ca;
+         --ok-bg:#ecfdf5; --ok-fg:#047857; --ok-line:#a7f3d0;
+         --warn-bg:#fffbeb; --warn-fg:#b45309; --warn-line:#fde68a;
+         --err-bg:#fef2f2; --err-fg:#b91c1c; --err-line:#fecaca; }
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f8fafc;color:var(--ink);margin:0;}
+  .wrap{max-width:1100px;margin:0 auto;padding:28px 24px;}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;}
+  .top h1{font-size:20px;margin:0;}
+  .top p{margin:2px 0 0;color:var(--muted);font-size:13px;}
+  .badge{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ok-fg);background:var(--ok-bg);border:1px solid var(--ok-line);padding:5px 10px;border-radius:999px;white-space:nowrap;}
+  .progress{display:flex;align-items:center;margin-bottom:26px;}
+  .pstep{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:60px;}
+  .circle{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--muted);background:#fff;}
+  .circle.active{border-color:var(--accent);color:var(--accent);}
+  .circle.done{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .plabel{font-size:10.5px;color:#94a3b8;text-align:center;}
+  .plabel.active{color:var(--accent-d);font-weight:600;}
+  .pline{flex:1;height:2px;background:var(--line);margin-bottom:18px;}
+  .pline.done{background:var(--accent);}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px;min-height:380px;box-shadow:0 1px 2px rgba(0,0,0,0.03);}
+  .card h2{margin:0 0 4px;font-size:16px;}
+  .hint{color:var(--muted);font-size:13px;margin:0 0 16px;}
+  .drop{border:2px dashed #cbd5e1;border-radius:12px;padding:32px;text-align:center;cursor:pointer;background:#f8fafc;transition:.15s;}
+  .drop:hover, .drop.over{border-color:var(--accent);background:#eef2ff;}
+  .drop .icon{font-size:26px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{background:#f8fafc;color:var(--muted);font-size:11px;text-transform:uppercase;text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);}
+  td{padding:6px 10px;border-bottom:1px solid #f1f5f9;white-space:nowrap;}
+  .tablebox{border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:320px;margin-top:8px;}
+  .btn{font-size:13px;font-weight:600;border-radius:9px;padding:9px 16px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);display:inline-flex;align-items:center;gap:6px;}
+  .btn:hover{background:#f8fafc;}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn.primary:hover{background:var(--accent-d);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn.warn{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn-fg);}
+  .footer-nav{display:flex;justify-content:space-between;margin-top:18px;}
+  .pill{font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;border:1px solid;}
+  .pill.matched{background:var(--ok-bg);color:var(--ok-fg);border-color:var(--ok-line);}
+  .pill.review{background:var(--warn-bg);color:var(--warn-fg);border-color:var(--warn-line);}
+  .pill.unmatched{background:var(--err-bg);color:var(--err-fg);border-color:var(--err-line);}
+  select,input[type=text],input[type=number]{font-size:13px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;}
+  label.row{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:9px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:18px;}
+  .errorbox{display:flex;gap:8px;font-size:13px;color:var(--err-fg);background:var(--err-bg);border:1px solid var(--err-line);padding:9px 12px;border-radius:9px;margin-bottom:16px;}
+  .startcards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+  .startcard{border:2px solid var(--line);border-radius:12px;padding:16px;cursor:pointer;text-align:left;background:#fff;}
+  .startcard:hover{border-color:var(--accent);}
+  .startcard b{display:block;margin-bottom:3px;font-size:14px;}
+  .startcard span{font-size:12.5px;color:var(--muted);}
+  .proflist-item{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:9px;padding:8px 12px;margin-bottom:7px;font-size:13px;}
+  .summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;}
+  .sumcard{border-radius:10px;padding:10px 14px;border:1px solid;}
+  .sumcard .v{font-size:22px;font-weight:700;}
+  .sumcard .l{font-size:11.5px;}
+  .ok-c{background:var(--ok-bg);color:var(--ok-fg);border-color:var(--ok-line);}
+  .warn-c{background:var(--warn-bg);color:var(--warn-fg);border-color:var(--warn-line);}
+  .slate-c{background:#f8fafc;color:#475569;border-color:var(--line);}
+  .small-muted{font-size:11.5px;color:#94a3b8;margin-top:14px;}
+  .editrow{display:flex;align-items:center;gap:10px;border:1px solid var(--warn-line);background:var(--warn-bg);border-radius:9px;padding:8px 10px;margin-bottom:8px;}
+  .diff-table td{white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;}
+  .diff-unchanged{color:#64748b;}
+  .diff-changed{color:var(--accent);font-weight:600;background:#eef2ff;}
+  .diff-highlight{background:#fef9c3;padding:1px 3px;border-radius:3px;}
+  .val-error{color:var(--err-fg);background:var(--err-bg);padding:2px 6px;border-radius:4px;font-size:11px;}
+  .val-warn{color:var(--warn-fg);background:var(--warn-bg);padding:2px 6px;border-radius:4px;font-size:11px;}
+  .val-ok{color:var(--ok-fg);background:var(--ok-bg);padding:2px 6px;border-radius:4px;font-size:11px;}
+  .transform-row{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-bottom:8px;background:#fff;flex-wrap:wrap;}
+  .transform-row select,.transform-row input{font-size:12px;padding:4px 6px;}
+  .filter-row{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-bottom:8px;background:#fff;}
+  .undo-bar{display:flex;gap:8px;align-items:center;padding:8px 12px;background:#f1f5f9;border-radius:8px;margin-bottom:12px;font-size:12px;}
+  .template-card{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;background:#fff;}
+  .template-card:hover{border-color:var(--accent);background:#eef2ff;}
+  .template-card b{font-size:13px;display:block;margin-bottom:2px;}
+  .template-card span{font-size:11px;color:var(--muted);}
+  .split-option{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;}
+  kbd{background:#f1f5f9;border:1px solid #cbd5e1;border-radius:4px;padding:2px 5px;font-size:11px;font-family:monospace;}
+  .kbd-hint{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#94a3b8;margin-top:8px;}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;}
+  .tab{padding:8px 14px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+  .tab.active{border-bottom-color:var(--accent);color:var(--accent);font-weight:600;}
+  .tab:hover{color:var(--accent);}
+  .tab-content{display:none;}
+  .tab-content.active{display:block;}
+  .textarea-import{width:100%;min-height:120px;font-family:monospace;font-size:12px;padding:10px;border:1px solid var(--line);border-radius:8px;resize:vertical;}
+  .encoding-info{font-size:12px;color:#64748b;margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+/* ======================= CONSTANTS ======================= */
+const STORAGE_KEY = "fc_profiles_v4";
+const DRAFT_KEY = "fc_draft_v4";
+const MONTHS_UPPER = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+const BUILTIN_TEMPLATES = [
+  {
+    id: "template_salesforce_contact",
+    name: "Salesforce Contact Import",
+    description: "Standard Salesforce Contact object format",
+    targetHeaders: ["FirstName","LastName","Email","Phone","MailingStreet","MailingCity","MailingState","MailingPostalCode","MailingCountry"],
+    formatRules: [], columnMap: [],
+    settings: { format:"CSV", separator:",", header:true, trim:true, skipEmpty:true, quoteText:false, overrideDate:false, dateFormat:"YYYY-MM-DD", overrideDecimals:false, decimals:2, overrideCase:false, caseValue:"Title", replaceEmpty:false, replaceValue:"" },
+    recodeRules: [], transformRules: [], filterRules: [],
+    splitSettings: { enabled:false, type:"none", value:10000 }
+  },
+  {
+    id: "template_quickbooks_journal",
+    name: "QuickBooks Journal Entry",
+    description: "QuickBooks IIF journal entry format",
+    targetHeaders: ["Date","RefNumber","Account","Debit","Credit","Memo","Name","Class"],
+    formatRules: [], columnMap: [],
+    settings: { format:"CSV", separator:",", header:true, trim:true, skipEmpty:true, quoteText:false, overrideDate:false, dateFormat:"MM/DD/YYYY", overrideDecimals:true, decimals:2, overrideCase:false, caseValue:"Title", replaceEmpty:false, replaceValue:"" },
+    recodeRules: [], transformRules: [], filterRules: [],
+    splitSettings: { enabled:false, type:"none", value:10000 }
+  },
+  {
+    id: "template_shopify_product",
+    name: "Shopify Product Import",
+    description: "Shopify product CSV format",
+    targetHeaders: ["Handle","Title","Body (HTML)","Vendor","Type","Tags","Price","SKU","Image Src"],
+    formatRules: [], columnMap: [],
+    settings: { format:"CSV", separator:",", header:true, trim:true, skipEmpty:false, quoteText:true, overrideDate:false, dateFormat:"YYYY-MM-DD", overrideDecimals:true, decimals:2, overrideCase:false, caseValue:"lower", replaceEmpty:false, replaceValue:"" },
+    recodeRules: [], transformRules: [], filterRules: [],
+    splitSettings: { enabled:false, type:"none", value:10000 }
+  }
+];
+
+/* ======================= STATE ======================= */
+let state = {
+  step: 1, error: "",
+  savedProfiles: JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"),
+  targetFileName: "", targetHeaders: [], targetSampleRows: [], formatRules: [],
+  inputFileNames: [], inputHeaders: [], inputRows: [], inputFormatRules: [],
+  columnMap: [], recodeRules: [],
+  transformRules: [],
+  filterRules: [],
+  splitSettings: { enabled: false, type: "none", value: 10000 },
+  inputEncoding: "auto", outputEncoding: "UTF-8",
+  history: [], historyIndex: -1,
+  settings: { format:"CSV", separator:",", header:true, trim:false, skipEmpty:false, quoteText:false,
+              overrideDate:false, dateFormat:"YYYY-MM-DD", overrideDecimals:false, decimals:2,
+              overrideCase:false, caseValue:"Title", replaceEmpty:false, replaceValue:"" },
+  result: null, profileName: "", converting: false,
+  validationResults: null,
+  showDiff: false,
+  draftRecovered: false,
+  activeTab: "basic"
+};
+
+/* ======================= HISTORY / UNDO (Feature 6) ======================= */
+function pushHistory(){
+  const snapshot = JSON.stringify({
+    step: state.step,
+    columnMap: state.columnMap,
+    recodeRules: state.recodeRules,
+    transformRules: state.transformRules,
+    filterRules: state.filterRules,
+    settings: state.settings,
+    splitSettings: state.splitSettings,
+    inputEncoding: state.inputEncoding,
+    outputEncoding: state.outputEncoding
+  });
+  if(state.history.length > 0 && state.history[state.history.length - 1] === snapshot) return;
+  state.history = state.history.slice(0, state.historyIndex + 1);
+  state.history.push(snapshot);
+  if(state.history.length > 50) state.history.shift();
+  state.historyIndex = state.history.length - 1;
+}
+
+function undo(){
+  if(state.historyIndex > 0){
+    state.historyIndex--;
+    const snap = JSON.parse(state.history[state.historyIndex]);
+    Object.assign(state, snap);
+    render();
+  }
+}
+
+function redo(){
+  if(state.historyIndex < state.history.length - 1){
+    state.historyIndex++;
+    const snap = JSON.parse(state.history[state.historyIndex]);
+    Object.assign(state, snap);
+    render();
+  }
+}
+
+function canUndo(){ return state.historyIndex > 0; }
+function canRedo(){ return state.historyIndex < state.history.length - 1; }
+
+function setState(patch, trackHistory = true){
+  if(trackHistory && (patch.columnMap !== undefined || patch.recodeRules !== undefined || 
+     patch.transformRules !== undefined || patch.filterRules !== undefined || 
+     patch.settings !== undefined || patch.splitSettings !== undefined)){
+    pushHistory();
+  }
+  state = {...state, ...patch};
+  saveDraft();
+  render();
+}
+
+function saveDraft(){
+  const draft = {
+    step: state.step,
+    targetFileName: state.targetFileName,
+    targetHeaders: state.targetHeaders,
+    targetSampleRows: state.targetSampleRows.slice(0,5),
+    formatRules: state.formatRules,
+    inputFileNames: state.inputFileNames,
+    inputHeaders: state.inputHeaders,
+    inputRows: state.inputRows.slice(0,5),
+    inputFormatRules: state.inputFormatRules,
+    columnMap: state.columnMap,
+    recodeRules: state.recodeRules,
+    transformRules: state.transformRules,
+    filterRules: state.filterRules,
+    splitSettings: state.splitSettings,
+    inputEncoding: state.inputEncoding,
+    outputEncoding: state.outputEncoding,
+    settings: state.settings,
+    profileName: state.profileName,
+    timestamp: Date.now()
+  };
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+}
+
+function loadDraft(){
+  try{
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
+    if(!draft) return false;
+    const age = Date.now() - (draft.timestamp || 0);
+    if(age > 7 * 24 * 60 * 60 * 1000) return false;
+    Object.assign(state, draft, { inputRows: state.inputRows, targetSampleRows: state.targetSampleRows, draftRecovered: true });
+    return true;
+  }catch(e){ return false; }
+}
+
+function clearDraft(){ localStorage.removeItem(DRAFT_KEY); }
+
+function saveProfilesToDisk(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedProfiles)); }
+
+const STEPS = ["Start","Target format","Input file","Mapping","Transform","Output settings","Validate","Preview","Download"];
+
+/* ======================= PARSING (Feature 5: Encoding) ======================= */
+async function detectEncoding(file){
+  try{
+    const buf = await file.arrayBuffer();
+    const arr = new Uint8Array(buf);
+    const detected = Encoding.detect(arr);
+    if(detected && detected !== 'UNICODE' && detected !== 'BINARY') return detected;
+  }catch(e){}
+  return 'UTF-8';
+}
+
+async function readFileWithEncoding(file, encoding){
+  if(encoding === 'auto') encoding = await detectEncoding(file);
+  const buf = await file.arrayBuffer();
+  const arr = new Uint8Array(buf);
+  const converted = Encoding.convert(arr, { to: 'UNICODE', from: encoding, type: 'string' });
+  return { text: converted, encoding };
+}
+
+async function parseFile(file, preferredEncoding = 'auto'){
+  const ext = file.name.toLowerCase().split(".").pop();
+  let detectedEncoding = 'UTF-8';
+
+  if(["csv","tsv","txt"].includes(ext)){
+    const res = await readFileWithEncoding(file, preferredEncoding);
+    detectedEncoding = res.encoding;
+    if(!res.text || !res.text.trim()) throw new Error(`"${file.name}" appears to be empty.`);
+    const parsed = Papa.parse(res.text, {header:true, skipEmptyLines:true});
+    const headers = (parsed.meta && parsed.meta.fields) ? parsed.meta.fields : [];
+    if(!headers.length) throw new Error(`Couldn't find a header row in "${file.name}".`);
+    return { headers, rows: parsed.data || [], encoding: detectedEncoding };
+  }
+  if(["xlsx","xls"].includes(ext)){
+    let wb;
+    try{
+      const buf = await file.arrayBuffer();
+      wb = XLSX.read(buf, {type:"array"});
+    }catch(e){
+      throw new Error(`Couldn't read "${file.name}" as an Excel file.`);
+    }
+    if(!wb || !wb.SheetNames || !wb.SheetNames.length){
+      throw new Error(`"${file.name}" doesn't contain any readable sheets.`);
+    }
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(sheet, {defval:""});
+    if(!json.length) throw new Error(`The first sheet in "${file.name}" has no data rows.`);
+    return { headers: Object.keys(json[0]), rows: json, encoding: 'UTF-8' };
+  }
+  if(ext === "json"){
+    const res = await readFileWithEncoding(file, preferredEncoding);
+    let data;
+    try{ data = JSON.parse(res.text); }
+    catch(e){ throw new Error(`"${file.name}" isn't valid JSON.`); }
+    const arr = Array.isArray(data) ? data : [data];
+    if(!arr.length || typeof arr[0] !== "object" || arr[0] === null){
+      throw new Error(`"${file.name}" should be a JSON array of objects.`);
+    }
+    return { headers: Object.keys(arr[0]), rows: arr, encoding: res.encoding };
+  }
+  if(ext === "pdf") throw new Error("PDF extraction isn't bundled here.");
+  throw new Error(`Unsupported file type: ".${ext}". Use CSV, TSV, TXT, JSON, XLSX, or XLS.`);
+}
+
+/* ======================= DATE FORMAT INFERENCE ======================= */
+function parseDateWithFormat(str, format){
+  if(!str || !format) return null;
+  str = String(str).trim();
+  let si = 0, fi = 0;
+  let year, month, day, hour = 0, minute = 0, second = 0, ampm = null;
+  const tokenDefs = [
+    { name: 'YYYY', re: /^(\d{4})/, parse: m => parseInt(m[1]), set: v => year = v },
+    { name: 'MMM', re: /^([A-Za-z]{3})/, parse: m => MONTHS_UPPER.indexOf(m[1].toUpperCase()), set: v => month = v },
+    { name: 'MM', re: /^(\d{2})/, parse: m => parseInt(m[1]) - 1, set: v => month = v },
+    { name: 'M', re: /^(\d{1,2})/, parse: m => parseInt(m[1]) - 1, set: v => month = v },
+    { name: 'DD', re: /^(\d{2})/, parse: m => parseInt(m[1]), set: v => day = v },
+    { name: 'D', re: /^(\d{1,2})/, parse: m => parseInt(m[1]), set: v => day = v },
+    { name: 'HH', re: /^(\d{2})/, parse: m => parseInt(m[1]), set: v => hour = v },
+    { name: 'H', re: /^(\d{1,2})/, parse: m => parseInt(m[1]), set: v => hour = v },
+    { name: 'hh', re: /^(\d{2})/, parse: m => parseInt(m[1]), set: v => hour = v },
+    { name: 'h', re: /^(\d{1,2})/, parse: m => parseInt(m[1]), set: v => hour = v },
+    { name: 'mm', re: /^(\d{2})/, parse: m => parseInt(m[1]), set: v => minute = v },
+    { name: 'm', re: /^(\d{1,2})/, parse: m => parseInt(m[1]), set: v => minute = v },
+    { name: 'ss', re: /^(\d{2})/, parse: m => parseInt(m[1]), set: v => second = v },
+    { name: 's', re: /^(\d{1,2})/, parse: m => parseInt(m[1]), set: v => second = v },
+    { name: 'A', re: /^(AM|PM)/i, parse: m => m[1].toUpperCase(), set: v => ampm = v },
+    { name: 'a', re: /^(am|pm)/i, parse: m => m[1].toLowerCase(), set: v => ampm = v },
+  ];
+  while(fi < format.length && si < str.length){
+    let token = null;
+    const remaining = format.slice(fi);
+    for(const def of tokenDefs){
+      if(remaining.startsWith(def.name)){
+        const m = str.slice(si).match(def.re);
+        if(!m) return null;
+        const val = def.parse(m);
+        if(val === null || val === undefined) return null;
+        if(def.name === 'MMM' && (val < 0 || val > 11)) return null;
+        if((def.name === 'DD' || def.name === 'D') && (val < 1 || val > 31)) return null;
+        if((def.name === 'MM' || def.name === 'M') && (val < 0 || val > 11)) return null;
+        if((def.name === 'HH' || def.name === 'H') && (val < 0 || val > 23)) return null;
+        if((def.name === 'hh' || def.name === 'h') && (val < 1 || val > 12)) return null;
+        if((def.name === 'mm' || def.name === 'm') && (val < 0 || val > 59)) return null;
+        if((def.name === 'ss' || def.name === 's') && (val < 0 || val > 59)) return null;
+        def.set(val);
+        si += m[0].length;
+        fi += def.name.length;
+        token = def.name;
+        break;
+      }
+    }
+    if(!token){
+      if(str[si] !== format[fi]) return null;
+      si++; fi++;
+    }
+  }
+  if(ampm === 'PM' && hour < 12) hour += 12;
+  if(ampm === 'AM' && hour === 12) hour = 0;
+  if(year === undefined || month === undefined || day === undefined) return null;
+  if(month < 0 || month > 11) return null;
+  if(day < 1 || day > 31) return null;
+  const d = new Date(year, month, day, hour, minute, second);
+  if(isNaN(d.getTime()) || d.getMonth() !== month || d.getDate() !== day) return null;
+  return d;
+}
+
+function formatDateWithFormat(date, format, monthCase){
+  if(!date || !format) return '';
+  const pad2 = n => String(n).padStart(2, '0');
+  const monthIdx = date.getMonth();
+  let monthAbbr = MONTHS_UPPER[monthIdx];
+  if(monthCase === 'lower') monthAbbr = monthAbbr.toLowerCase();
+  else if(monthCase === 'title') monthAbbr = monthAbbr[0] + monthAbbr.slice(1).toLowerCase();
+  const map = {
+    'YYYY': String(date.getFullYear()), 'YY': String(date.getFullYear()).slice(-2),
+    'MMM': monthAbbr, 'MM': pad2(monthIdx + 1), 'M': String(monthIdx + 1),
+    'DD': pad2(date.getDate()), 'D': String(date.getDate()),
+    'HH': pad2(date.getHours()), 'H': String(date.getHours()),
+    'hh': pad2(date.getHours() % 12 || 12), 'h': String(date.getHours() % 12 || 12),
+    'mm': pad2(date.getMinutes()), 'm': String(date.getMinutes()),
+    'ss': pad2(date.getSeconds()), 's': String(date.getSeconds()),
+    'A': date.getHours() >= 12 ? 'PM' : 'AM', 'a': date.getHours() >= 12 ? 'pm' : 'am',
+  };
+  let result = format;
+  const tokens = Object.keys(map).sort((a, b) => b.length - a.length);
+  for(const tok of tokens){ result = result.split(tok).join(map[tok]); }
+  return result;
+}
+
+function buildFormatString(s){
+  let format = '', i = 0;
+  let dateTokens = { day: false, month: false, year: false };
+  let timeTokens = { hour: false, minute: false, second: false };
+  const hasAmPm = /\b[AP]M\b/i.test(s);
+  while(i < s.length){
+    const ch = s[i];
+    if(/[A-Za-z]/.test(ch)){
+      const word = s.slice(i).match(/^[A-Za-z]+/)?.[0];
+      if(!word) return null;
+      const upper = word.toUpperCase();
+      if(word.length === 3 && MONTHS_UPPER.includes(upper)){
+        format += 'MMM'; dateTokens.month = true; i += 3;
+      } else if(upper === 'AM' || upper === 'PM'){
+        format += 'A'; i += word.length;
+      } else { return null; }
+      continue;
+    }
+    if(/\d/.test(ch)){
+      const numStr = s.slice(i).match(/^\d+/)?.[0];
+      const len = numStr.length;
+      const num = parseInt(numStr);
+      const rest = s.slice(i + len);
+      const isTime = rest.match(/^[:.]/) || format.match(/[Hhms:]$/) || timeTokens.hour;
+      if(isTime){
+        if(!timeTokens.hour){
+          format += (len === 2 ? (hasAmPm ? 'hh' : 'HH') : (hasAmPm ? 'h' : 'H'));
+          timeTokens.hour = true;
+        } else if(!timeTokens.minute){
+          format += (len === 2 ? 'mm' : 'm'); timeTokens.minute = true;
+        } else if(!timeTokens.second){
+          format += (len === 2 ? 'ss' : 's'); timeTokens.second = true;
+        } else { format += 'HH'; }
+      } else {
+        if(len === 4 && num >= 1000 && !dateTokens.year){
+          format += 'YYYY'; dateTokens.year = true;
+        } else if(len === 2){
+          const nextNumMatch = rest.match(/\d+/);
+          if(nextNumMatch && num <= 12){
+            const nextNum = parseInt(nextNumMatch[0]);
+            if(nextNum > 12 && nextNum <= 31 && !dateTokens.month){
+              format += 'MM'; dateTokens.month = true; i += len; continue;
+            }
+          }
+          if(!dateTokens.day && num >= 1 && num <= 31){
+            format += 'DD'; dateTokens.day = true;
+          } else if(!dateTokens.month && num >= 1 && num <= 12){
+            format += 'MM'; dateTokens.month = true;
+          } else if(!dateTokens.year){
+            format += 'YY'; dateTokens.year = true;
+          } else { format += 'DD'; }
+        } else if(len === 1){
+          if(!dateTokens.day && num >= 1 && num <= 9){
+            format += 'D'; dateTokens.day = true;
+          } else if(!dateTokens.month && num >= 1 && num <= 9){
+            format += 'M'; dateTokens.month = true;
+          } else { format += 'D'; }
+        } else { format += 'Y'.repeat(len); dateTokens.year = true; }
+      }
+      i += len; continue;
+    }
+    format += ch; i++;
+  }
+  return format;
+}
+
+function inferDateFormat(samples){
+  if(!samples || samples.length === 0) return null;
+  const checkSamples = samples.slice(0, 100);
+  const format = buildFormatString(checkSamples[0]);
+  if(!format) return null;
+  const matchCount = checkSamples.filter(s => parseDateWithFormat(s, format) !== null).length;
+  if(matchCount / checkSamples.length >= 0.8) return format;
+  return null;
+}
+
+function detectMonthCase(values){
+  const months = values.map(v => {
+    const m = String(v).match(/[A-Za-z]{3}/);
+    return m ? m[0] : null;
+  }).filter(Boolean);
+  if(months.length === 0) return 'upper';
+  const allUpper = months.every(m => m === m.toUpperCase());
+  const allLower = months.every(m => m === m.toLowerCase());
+  if(allLower) return 'lower';
+  if(allUpper) return 'upper';
+  return 'title';
+}
+
+/* ======================= FORMAT DETECTION ======================= */
+const DATE_PATTERNS = [
+  {re:/^\d{4}-\d{2}-\d{2}$/, label:"YYYY-MM-DD", format:"YYYY-MM-DD"},
+  {re:/^\d{2}\/\d{2}\/\d{4}$/, label:"DD/MM/YYYY", format:"DD/MM/YYYY"},
+  {re:/^\d{2}-\d{2}-\d{4}$/, label:"MM-DD-YYYY", format:"MM-DD-YYYY"},
+  {re:/^\d{2}\/\d{2}\/\d{2}$/, label:"DD/MM/YY", format:"DD/MM/YY"},
+  {re:/^\d{1,2}\s[A-Za-z]{3}\s\d{4}$/, label:"DD MMM YYYY", format:"DD MMM YYYY"},
+  {re:/^\d{10}$/, label:"Unix timestamp (seconds)", format:"UNIX_S"},
+  {re:/^\d{13}$/, label:"Unix timestamp (ms)", format:"UNIX_MS"},
+];
+
+function detectDate(values){
+  if(!values.length) return null;
+  const inferred = inferDateFormat(values);
+  if(inferred){
+    return { label: inferred, key: inferred, inferredFormat: inferred, monthCase: detectMonthCase(values) };
+  }
+  for(const p of DATE_PATTERNS){
+    const m = values.filter(v => p.re.test(v.trim())).length;
+    if(m / values.length >= 0.8){
+      return { label: p.label, key: p.format, inferredFormat: p.format, monthCase: 'upper' };
+    }
+  }
+  return null;
+}
+
+function mostCommon(arr){ const c={}; arr.forEach(v=>c[v]=(c[v]||0)+1); return Number(Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]); }
+
+function detectNumber(values){
+  if(!values.length) return null;
+  const re = /^[\-(]?[$\u20ac\u00a3\u20b9]?\s?[\d.,\s]+\)?%?$/;
+  const numeric = values.filter(v=>re.test(v.trim()) && /\d/.test(v));
+  if(numeric.length === 0 || numeric.length/values.length < 0.8) return null;
+  const decCounts = numeric.map(v=>{ const c=v.replace(/[^\d.,]/g,""); const m=c.match(/[.,](\d+)$/); return m?m[1].length:0; });
+  const decimals = mostCommon(decCounts);
+  const hasThousands = numeric.some(v=>/\d[.,]\d{3}\b/.test(v));
+  const curMatch = values.find(v=>/[$\u20ac\u00a3\u20b9]/.test(v));
+  const currencySymbol = curMatch ? curMatch.match(/[$\u20ac\u00a3\u20b9]/)[0] : null;
+  const currencyPrefix = curMatch ? /^[$\u20ac\u00a3\u20b9]/.test(curMatch.trim()) : null;
+  const negParen = values.some(v=>/^\(.*\)$/.test(v.trim()));
+  const zeroPadded = values.length>0 && values.every(v=>/^0\d/.test(v.trim()));
+  let label = decimals + " decimal place" + (decimals===1?"":"s");
+  if(hasThousands) label += ", thousands separator";
+  if(currencySymbol) label += `, currency ${currencySymbol} (${currencyPrefix?"prefix":"suffix"})`;
+  if(negParen) label += ", negatives in parentheses";
+  if(zeroPadded) label += ", zero-padded";
+  return {label, decimals, hasThousands, currencySymbol, currencyPrefix, negParen, zeroPadded};
+}
+
+function detectText(values){
+  if(!values.length) return {label:"Mixed case"};
+  const letters = values.filter(v=>/[A-Za-z]/.test(v));
+  const isUpper = letters.length>0 && letters.every(v=>v===v.toUpperCase());
+  const isLower = letters.length>0 && letters.every(v=>v===v.toLowerCase());
+  const isTitle = letters.length>0 && letters.every(v=>v.split(/\s+/).filter(Boolean).every(w=>w[0]===w[0].toUpperCase() && w.slice(1)===w.slice(1).toLowerCase()));
+  const lens = new Set(values.map(v=>v.length));
+  const fixedLength = lens.size===1 ? values[0].length : null;
+  const trailingSpace = values.some(v=>/\s$/.test(v));
+  const leadingSpace = values.some(v=>/^\s/.test(v));
+  let label = "Mixed case";
+  if(isUpper) label="UPPERCASE"; else if(isLower) label="lowercase"; else if(isTitle) label="Title Case";
+  if(fixedLength) label += `, fixed length ${fixedLength}`;
+  if(trailingSpace) label += ", right-padded with spaces";
+  if(leadingSpace) label += ", left-padded with spaces";
+  return {label, isUpper, isLower, isTitle, fixedLength, leadingSpace, trailingSpace};
+}
+
+function detectNullRepr(rows, col){
+  const rawCells = rows.map(r=>r[col]);
+  const tokenBlank = rawCells.find(v=>typeof v==="string" && ["N/A","NA","NULL","n/a","null","-"].includes(v.trim()));
+  if(tokenBlank !== undefined){ const t = tokenBlank.trim(); return { raw: t, display: t }; }
+  const whitespaceBlank = rawCells.find(v=> v===undefined || v===null || (typeof v==="string" && v.trim()===""));
+  if(whitespaceBlank !== undefined){
+    const raw = (whitespaceBlank===undefined || whitespaceBlank===null) ? "" : String(whitespaceBlank);
+    const display = raw.length ? `blank (${raw.length} space${raw.length===1?"":"s"})` : "blank (empty string)";
+    return { raw, display };
+  }
+  return null;
+}
+
+function detectColumnRules(headers, rows){
+  return headers.map(col=>{
+    const raw = rows.map(r=>r[col]).filter(v=>v!==undefined && v!==null && String(v).trim()!=="");
+    const strValues = raw.map(v=>String(v));
+    const dateInfo = detectDate(strValues);
+    const numInfo = !dateInfo ? detectNumber(strValues) : null;
+    const textInfo = !dateInfo && !numInfo ? detectText(strValues) : null;
+    let type="Text", rule="", detail=textInfo;
+    if(dateInfo){ type="Date"; rule=dateInfo.label; detail=dateInfo; }
+    else if(numInfo){ type="Number"; rule=numInfo.label; detail=numInfo; }
+    else { type="Text"; rule = textInfo ? textInfo.label : "Mixed case"; }
+    return { column:col, type, rule, detail, nullRule: detectNullRepr(rows,col), editing:false };
+  });
+}
+
+/* ======================= FEATURE 2: TRANSFORM RULES ======================= */
+function applyTransform(value, rule){
+  if(!rule || !rule.type || !rule.active) return value;
+  let v = String(value ?? "");
+  switch(rule.type){
+    case "findReplace":
+      if(rule.useRegex){
+        try{
+          const re = new RegExp(rule.find, 'g');
+          v = v.replace(re, rule.replace || "");
+        }catch(e){}
+      } else {
+        v = v.split(rule.find).join(rule.replace || "");
+      }
+      break;
+    case "substring":
+      const start = parseInt(rule.start) || 0;
+      const len = parseInt(rule.length);
+      v = len ? v.slice(start, start + len) : v.slice(start);
+      break;
+    case "conditional":
+      if(v === rule.conditionValue) v = rule.thenValue;
+      else if(rule.elseValue) v = rule.elseValue;
+      break;
+    case "math":
+      const num = parseFloat(v.replace(/[^\d.\-]/g, ""));
+      if(!isNaN(num)){
+        const op = rule.mathOp;
+        const operand = parseFloat(rule.mathValue) || 0;
+        let result = num;
+        switch(op){
+          case "add": result = num + operand; break;
+          case "subtract": result = num - operand; break;
+          case "multiply": result = num * operand; break;
+          case "divide": result = operand !== 0 ? num / operand : num; break;
+          case "round": result = Math.round(num); break;
+          case "floor": result = Math.floor(num); break;
+          case "ceil": result = Math.ceil(num); break;
+          case "abs": result = Math.abs(num); break;
+        }
+        v = String(result);
+      }
+      break;
+    case "prefix":
+      v = (rule.prefix || "") + v;
+      break;
+    case "suffix":
+      v = v + (rule.suffix || "");
+      break;
+  }
+  return v;
+}
+
+/* ======================= FEATURE 3: FILTER RULES ======================= */
+function shouldIncludeRow(row, filterRules){
+  if(!filterRules || filterRules.length === 0) return true;
+  for(const rule of filterRules){
+    if(!rule.active || !rule.column) continue;
+    const val = String(row[rule.column] ?? "").trim();
+    let match = false;
+    switch(rule.operator){
+      case "equals": match = val === rule.value; break;
+      case "notEquals": match = val !== rule.value; break;
+      case "contains": match = val.includes(rule.value); break;
+      case "notContains": match = !val.includes(rule.value); break;
+      case "startsWith": match = val.startsWith(rule.value); break;
+      case "endsWith": match = val.endsWith(rule.value); break;
+      case "greaterThan": match = parseFloat(val) > parseFloat(rule.value); break;
+      case "lessThan": match = parseFloat(val) < parseFloat(rule.value); break;
+      case "regex":
+        try{ match = new RegExp(rule.value).test(val); }catch(e){ match = false; }
+        break;
+      case "empty": match = val === ""; break;
+      case "notEmpty": match = val !== ""; break;
+    }
+    if(rule.action === "include" && !match) return false;
+    if(rule.action === "exclude" && match) return false;
+  }
+  return true;
+}
+
+/* ======================= FEATURE 1: VALIDATION ======================= */
+function validateData(rows, columnMap, targetRulesByCol, inputRulesByCol){
+  const issues = [];
+  const activeCols = columnMap.filter(c => c.action !== "skip");
+
+  const keyCols = activeCols.filter(c => c.action === "map").map(c => c.inputColumn);
+  if(keyCols.length > 0){
+    const seen = new Set();
+    let dupCount = 0;
+    rows.forEach((row) => {
+      const key = keyCols.map(c => String(row[c] ?? "")).join("|");
+      if(seen.has(key)) dupCount++;
+      else seen.add(key);
+    });
+    if(dupCount > 0){
+      issues.push({ type: "warn", message: `${dupCount} duplicate rows detected based on key columns` });
+    }
+  }
+
+  activeCols.forEach(c => {
+    const targetRule = targetRulesByCol[c.targetColumn];
+    if(!targetRule) return;
+
+    let blankCount = 0;
+    let typeMismatchCount = 0;
+    let rangeIssues = 0;
+
+    rows.forEach(row => {
+      let val;
+      if(c.action === "map") val = row[c.inputColumn];
+      else if(c.action === "sample") val = c.sampleValue;
+      else if(c.action === "default") val = c.defaultValue;
+      else val = "";
+
+      const strVal = String(val ?? "").trim();
+      if(strVal === ""){
+        blankCount++;
+        return;
+      }
+
+      if(targetRule.type === "Number"){
+        const numStr = strVal.replace(/[^\d.\-]/g, "");
+        if(numStr === "" || isNaN(parseFloat(numStr))) typeMismatchCount++;
+      } else if(targetRule.type === "Date"){
+        const d = parseLooseDate(strVal);
+        if(!d || isNaN(d.getTime())) typeMismatchCount++;
+        else {
+          const year = d.getFullYear();
+          if(year < 1900 || year > 2100) rangeIssues++;
+        }
+      }
+    });
+
+    if(blankCount > 0){
+      const pct = Math.round((blankCount / rows.length) * 100);
+      issues.push({ type: pct > 50 ? "error" : pct > 10 ? "warn" : "ok", message: `${c.targetColumn}: ${blankCount} blank values (${pct}%)` });
+    }
+    if(typeMismatchCount > 0){
+      issues.push({ type: "error", message: `${c.targetColumn}: ${typeMismatchCount} type mismatches (expected ${targetRule.type})` });
+    }
+    if(rangeIssues > 0){
+      issues.push({ type: "warn", message: `${c.targetColumn}: ${rangeIssues} dates outside 1900-2100 range` });
+    }
+  });
+
+  return { issues, totalRows: rows.length, checkedAt: new Date().toLocaleString() };
+}
+
+/* ======================= MAPPING ======================= */
+function normalize(s){ return String(s).toLowerCase().replace(/[^a-z0-9]/g,""); }
+function levenshtein(a,b){
+  const m=a.length,n=b.length; const dp=Array.from({length:m+1},()=>new Array(n+1).fill(0));
+  for(let i=0;i<=m;i++) dp[i][0]=i; for(let j=0;j<=n;j++) dp[0][j]=j;
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+  return dp[m][n];
+}
+function similarity(a,b){ const na=normalize(a),nb=normalize(b); if(!na.length||!nb.length) return 0; return 1-levenshtein(na,nb)/Math.max(na.length,nb.length); }
+function autoMapTargets(targetHeaders, inputHeaders){
+  const used = new Set();
+  return targetHeaders.map(t=>{
+    let best=null,bestScore=0;
+    inputHeaders.forEach(inp=>{
+      if(used.has(inp)) return;
+      const score = normalize(inp)===normalize(t) ? 1 : similarity(inp,t);
+      if(score>bestScore){bestScore=score; best=inp;}
+    });
+    if(best && bestScore>=0.6){
+      used.add(best);
+      return {targetColumn:t, action:"map", inputColumn:best, sampleValue:"", defaultValue:""};
+    }
+    return {targetColumn:t, action:null, inputColumn:null, sampleValue:"", defaultValue:""};
+  });
+}
+function getSampleValues(col){
+  const vals = (state.targetSampleRows||[]).map(r=>r[col]).filter(v=>v!==undefined && v!==null && String(v).trim()!=="");
+  return Array.from(new Set(vals.map(v=>String(v)))).slice(0,8);
+}
+function columnStatus(c){
+  if(!c.action) return "unmatched";
+  if(c.action==="map") return c.inputColumn ? "matched" : "review";
+  if(c.action==="sample") return c.sampleValue ? "matched" : "review";
+  if(c.action==="default" || c.action==="blank" || c.action==="skip") return "matched";
+  return "unmatched";
+}
+function statusLabel(s){ return s==="matched" ? "Resolved" : s==="review" ? "Review" : "Action needed"; }
+
+/* ======================= FORMATTING / OUTPUT ======================= */
+function pad2(n){ return String(n).padStart(2,"0"); }
+
+function parseLooseDate(v){
+  if(typeof v === "number") { const d = new Date(v); return isNaN(d.getTime()) ? null : d; }
+  if(typeof v !== "string" || !v.trim()) return null;
+  if(!/\d/.test(v) || (!/[\-\/\s:]/.test(v) && v.length < 6)) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function applyCase(v,mode){
+  if(mode==="UPPER") return v.toUpperCase();
+  if(mode==="lower") return v.toLowerCase();
+  if(mode==="Title") return v.replace(/\w\S*/g, t=>t[0].toUpperCase()+t.slice(1).toLowerCase());
+  return v;
+}
+
+function applyFormatting(value, targetRule, inputRule, ov){
+  let v = value===undefined||value===null ? "" : String(value);
+  if(v.trim()===""){
+    if(ov.replaceEmpty && ov.replaceValue) return ov.replaceValue;
+    if(targetRule && targetRule.nullRule){
+      let fill = targetRule.nullRule.raw;
+      if(ov.trim) fill = fill.trim();
+      return fill;
+    }
+    return "";
+  }
+  if(ov.trim) v = v.trim();
+
+  if((targetRule && targetRule.type==="Number") || ov.overrideDecimals){
+    const numStr = v.replace(/[^0-9.\-]/g,"");
+    const dotCount = (numStr.match(/\./g) || []).length;
+    if(dotCount <= 1){
+      const num = parseFloat(numStr);
+      if(!isNaN(num)){
+        const decimals = ov.overrideDecimals ? ov.decimals : (targetRule && targetRule.detail && targetRule.detail.decimals!=null ? targetRule.detail.decimals : 2);
+        v = num.toFixed(decimals);
+        if(targetRule && targetRule.detail && targetRule.detail.hasThousands){
+          const parts = v.split("."); parts[0]=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,","); v=parts.join(".");
+        }
+      }
+    }
+  } else if((targetRule && targetRule.type==="Date") || ov.overrideDate){
+    let d;
+    const inputFormat = inputRule?.detail?.inferredFormat;
+    if(typeof value === 'object' && value instanceof Date){
+      d = value;
+    } else if(inputFormat === 'UNIX_S'){
+      d = new Date(parseInt(v) * 1000);
+    } else if(inputFormat === 'UNIX_MS'){
+      d = new Date(parseInt(v));
+    } else if(inputFormat){
+      d = parseDateWithFormat(v, inputFormat);
+    } else {
+      d = parseLooseDate(v);
+    }
+    if(d && !isNaN(d.getTime())){
+      const fmt = ov.overrideDate ? ov.dateFormat : (targetRule?.detail?.inferredFormat || "YYYY-MM-DD");
+      if(fmt === 'UNIX_S'){
+        v = String(Math.floor(d.getTime() / 1000));
+      } else if(fmt === 'UNIX_MS'){
+        v = String(d.getTime());
+      } else {
+        const monthCase = targetRule?.detail?.monthCase || 'upper';
+        v = formatDateWithFormat(d, fmt, monthCase);
+      }
+    }
+  } else {
+    if(ov.overrideCase) v = applyCase(v, ov.caseValue);
+    else if(targetRule && targetRule.detail && targetRule.detail.isUpper) v = v.toUpperCase();
+    else if(targetRule && targetRule.detail && targetRule.detail.isLower) v = v.toLowerCase();
+    else if(targetRule && targetRule.detail && targetRule.detail.isTitle) v = applyCase(v,"Title");
+  }
+  // Fixed-length padding (Issue 3 fix)
+  if(targetRule && targetRule.type === "Text" && targetRule.detail && targetRule.detail.fixedLength){
+    const targetLen = targetRule.detail.fixedLength;
+    if(v.length < targetLen){
+      v = v.padEnd(targetLen, ' ');
+    } else if(v.length > targetLen && !ov.quoteText){
+      v = v.slice(0, targetLen);
+    }
+  }
+  if(ov.quoteText && !(targetRule && targetRule.type==="Number")) v = `\"${v}\"`;
+  return v;
+}
+
+function convertRows(inputRows, columnMap, targetRulesByCol, inputRulesByCol, ov, recodeRules, transformRules, filterRules){
+  let skipped=0; const blankCounts={};
+  const activeCols = columnMap.filter(c=>c.action!=="skip");
+
+  // Apply filters first (Feature 3)
+  let filteredRows = inputRows;
+  if(filterRules && filterRules.length > 0){
+    filteredRows = inputRows.filter(row => shouldIncludeRow(row, filterRules));
+  }
+
+  const rows = filteredRows.map(row=>{
+    if(ov.skipEmpty && Object.values(row).every(v=>String(v??"").trim()==="")){ skipped++; return null; }
+    const out = {};
+    activeCols.forEach(c=>{
+      const targetRule = targetRulesByCol[c.targetColumn];
+      const inputRule = c.action==="map" ? inputRulesByCol[c.inputColumn] : null;
+      let val;
+      if(c.action==="map"){
+        const rawVal = row[c.inputColumn];
+        const rawStr = (rawVal===undefined||rawVal===null) ? "" : String(rawVal).trim();
+
+        // Apply transform rules first (Feature 2)
+        let transformedVal = rawStr;
+        if(transformRules){
+          const colTransforms = transformRules.filter(t => t.active && t.column === c.targetColumn);
+          for(const t of colTransforms){
+            transformedVal = applyTransform(transformedVal, t);
+          }
+        }
+
+        const recode = (recodeRules||[]).find(rr=>rr.column===c.targetColumn && String(rr.find).trim()===transformedVal);
+        if(recode){
+          val = ov.trim ? String(recode.replace).trim() : recode.replace;
+        } else {
+          val = applyFormatting(transformedVal, targetRule, inputRule, ov);
+        }
+      }
+      else if(c.action==="sample") val = applyFormatting(c.sampleValue||"", targetRule, null, ov);
+      else if(c.action==="default") val = applyFormatting(c.defaultValue||"", targetRule, null, ov);
+      else if(c.action==="blank") val = applyFormatting("", targetRule, null, ov);
+      else val = "";
+      out[c.targetColumn] = val;
+      if(String(val).trim()==="") blankCounts[c.targetColumn]=(blankCounts[c.targetColumn]||0)+1;
+    });
+    return out;
+  }).filter(Boolean);
+  return {rows, skipped, blankCounts, columns: activeCols.map(c=>c.targetColumn), filteredCount: inputRows.length - filteredRows.length};
+}
+
+function escapeCsvField(value, sep){
+  const str = String(value);
+  if(str.includes('"') || str.includes(sep) || str.includes("\n") || str.includes("\r")){
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+function generateOutputText(rows, columns, settings, encoding){
+  if(settings.format==="JSON") return JSON.stringify(rows, null, 2);
+  const sep = settings.separator;
+  const lines = [];
+  if(settings.header) lines.push(columns.map(c=>escapeCsvField(c, sep)).join(sep));
+  rows.forEach(r=>lines.push(columns.map(c=>escapeCsvField(r[c]??"", sep)).join(sep)));
+  let text = lines.join("\n");
+
+  // Feature 5: Encoding conversion for output
+  if(encoding && encoding !== 'UTF-8' && encoding !== 'UNICODE'){
+    try{
+      const unicodeArr = Encoding.stringToCode(text);
+      const encoded = Encoding.convert(unicodeArr, { to: encoding, from: 'UNICODE', type: 'array' });
+      return new Uint8Array(encoded);
+    }catch(e){
+      console.warn("Encoding conversion failed, using UTF-8", e);
+    }
+  }
+  return text;
+}
+
+function downloadText(content, filename, mime, encoding){
+  let blob;
+  if(content instanceof Uint8Array){
+    blob = new Blob([content], {type: mime});
+  } else {
+    blob = new Blob([content], {type: mime + (encoding ? `;charset=${encoding}` : '')});
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ======================= RENDER ======================= */
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+function render(){
+  const app = document.getElementById("app");
+  const activeEl = document.activeElement;
+  let focusRestore = null;
+  let focusRect = null;
+  if(activeEl && activeEl !== document.body && (activeEl.tagName === 'SELECT' || activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')){
+    const ds = activeEl.dataset;
+    if(ds.colAction !== undefined) focusRestore = `[data-col-action="${ds.colAction}"]`;
+    else if(ds.colInput !== undefined) focusRestore = `[data-col-input="${ds.colInput}"]`;
+    else if(ds.colSample !== undefined) focusRestore = `[data-col-sample="${ds.colSample}"]`;
+    else if(ds.colDefault !== undefined) focusRestore = `[data-col-default="${ds.colDefault}"]`;
+    else if(ds.ruleEdit !== undefined) focusRestore = `[data-rule-edit="${ds.ruleEdit}"]`;
+    else if(ds.recodeCol !== undefined) focusRestore = `[data-recode-col="${ds.recodeCol}"]`;
+    else if(ds.recodeFind !== undefined) focusRestore = `[data-recode-find="${ds.recodeFind}"]`;
+    else if(ds.recodeReplace !== undefined) focusRestore = `[data-recode-replace="${ds.recodeReplace}"]`;
+    else if(ds.transformIndex !== undefined) focusRestore = `[data-transform-index="${ds.transformIndex}"]`;
+    else if(ds.filterIndex !== undefined) focusRestore = `[data-filter-index="${ds.filterIndex}"]`;
+    else if(activeEl.id) focusRestore = `#${CSS.escape(activeEl.id)}`;
+    if(focusRestore){
+      const rect = activeEl.getBoundingClientRect();
+      focusRect = { top: rect.top, left: rect.left };
+    }
+  }
+  const scrollY = window.scrollY;
+  app.innerHTML = `
+    <div class="top">
+      <div><h1>Format Converter Pro</h1><p>Rule-based file conversion with validation, transforms & diff view</p></div>
+      <div class="badge">🔒 100% local — saved to this browser only</div>
+    </div>
+    ${renderProgress()}
+    ${state.error ? `<div class="errorbox">⚠️ ${esc(state.error)}</div>` : ""}
+    <div class="card">${renderStep()}</div>
+    ${state.step < 9 ? renderFooterNav() : ""}
+    ${renderKeyboardHints()}
+  `;
+  bindEvents();
+  if((state.step === 4 || state.step === 5 || state.step === 6) && focusRestore){
+    const el = document.querySelector(focusRestore);
+    if(el){
+      const beforeScrollY = window.scrollY;
+      const beforeScrollX = window.scrollX;
+      el.focus();
+      requestAnimationFrame(() => {
+        window.scrollTo(beforeScrollX, beforeScrollY);
+        if(focusRect){
+          const newRect = el.getBoundingClientRect();
+          const deltaY = newRect.top - focusRect.top;
+          if(Math.abs(deltaY) > 2){
+            window.scrollBy(0, -deltaY);
+          }
+        }
+      });
+    }
+  } else {
+    window.scrollTo(window.scrollX, scrollY);
+  }
+}
+
+function renderKeyboardHints(){
+  if(state.step === 1 || state.step === 9) return '';
+  return `<div class="kbd-hint">
+    <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> Next step</span>
+    <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> Run</span>
+    <span><kbd>Ctrl</kbd>+<kbd>Z</kbd> Undo</span>
+    <span><kbd>Ctrl</kbd>+<kbd>Y</kbd> Redo</span>
+    <span><kbd>Esc</kbd> Back</span>
+  </div>`;
+}
+
+function renderProgress(){
+  return `<div class="progress">${STEPS.map((label,i)=>{
+    const n=i+1, active=n===state.step, done=n<state.step;
+    return `
+      <div class="pstep">
+        <div class="circle ${done?"done":active?"active":""}">${done?"✓":n}</div>
+        <div class="plabel ${active?"active":""}">${label}</div>
+      </div>
+      ${n<STEPS.length ? `<div class="pline ${done?"done":""}"></div>` : ""}
+    `;
+  }).join("")}</div>`;
+}
+
+function renderFooterNav(){
+  const canNext = canGoNext();
+  return `<div class="footer-nav">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" id="backBtn" ${state.step===1?"disabled":""}>← Back</button>
+      ${state.step > 1 && state.step < 9 ? `<button class="btn" id="undoBtn" ${canUndo()?"":"disabled"}>↩ Undo</button>` : ""}
+      ${state.step > 1 && state.step < 9 ? `<button class="btn" id="redoBtn" ${canRedo()?"":"disabled"}>↪ Redo</button>` : ""}
+    </div>
+    <button class="btn primary" id="nextBtn" ${canNext?"":"disabled"}>${state.step===7?"Validate & Preview":state.step===8?"Confirm & Download":"Next →"}</button>
+  </div>`;
+}
+
+function canGoNext(){
+  if(state.step===2) return state.targetHeaders.length>0;
+  if(state.step===3) return state.inputRows.length>0;
+  if(state.step===4) return state.columnMap.every(c => columnStatus(c) === "matched");
+  return true;
+}
+
+function renderStep(){
+  switch(state.step){
+    case 1: return step1();
+    case 2: return step2();
+    case 3: return step3();
+    case 4: return step4();
+    case 5: return step5();
+    case 6: return step6();
+    case 7: return step7();
+    case 8: return step8();
+    case 9: return step9();
+  }
+}
+
+/* ======================= STEP RENDERERS ======================= */
+function step1(){
+  const profiles = state.savedProfiles;
+  return `
+    <h2>Start a conversion</h2>
+    <div class="startcards">
+      <div class="startcard" id="newConvCard"><b>🆕 Start new conversion</b><span>Upload a sample target file and detect formatting from scratch.</span></div>
+      <div class="startcard" id="importCard"><b>📂 Import a profile backup</b><span>Load a previously exported profiles JSON file.</span><input type="file" id="importInput" accept=".json" style="display:none"/></div>
+    </div>
+
+    <h3 style="font-size:13px;margin-bottom:8px;">Built-in templates (Feature 7)</h3>
+    <div style="margin-bottom:20px;">
+      ${BUILTIN_TEMPLATES.map(t=>`
+        <div class="template-card" data-template-id="${esc(t.id)}">
+          <b>${esc(t.name)}</b>
+          <span>${esc(t.description)}</span>
+        </div>
+      `).join("")}
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h3 style="font-size:13px;margin:0;">Saved profiles (stored in this browser)</h3>
+      ${profiles.length>0 ? `<button class="btn" id="exportBtn" style="padding:5px 10px;font-size:12px;">💾 Export backup</button>` : ""}
+    </div>
+    ${profiles.length===0 ? `<p style="color:#94a3b8;font-size:13px;font-style:italic;">No profiles yet — finish a conversion and one will be saved here automatically.</p>` :
+      profiles.map((p,i)=>`
+        <div class="proflist-item">
+          <div><b>${esc(p.name)}</b><div style="color:#94a3b8;font-size:11.5px;">${esc(p.date)} · ${p.rowCount} rows · ${esc(p.status)}</div></div>
+          <button class="btn" data-load="${i}" style="padding:5px 10px;font-size:12px;">Load</button>
+        </div>
+      `).join("")}
+    <p class="small-muted">Profiles are saved with <code>localStorage</code> in this browser. They won't sync across other computers or browsers.</p>
+
+    ${state.draftRecovered ? `<div class="errorbox" style="background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn-fg);">
+      💡 A draft from your previous session was recovered. <button class="btn" id="clearDraftBtn" style="padding:3px 8px;font-size:11px;margin-left:8px;">Discard draft</button>
+    </div>` : ""}
+  `;
+}
+
+function step2(){
+  return `
+    <h2>Upload the target/sample format file</h2>
+    <p class="hint">Include a header row plus a few sample data rows so formatting can be detected automatically.</p>
+    <div class="drop" id="targetDrop"><div class="icon">⬆️</div><div>Drag a file here, or click to browse</div><div class="hint" style="margin:4px 0 0;">CSV, TSV, JSON, TXT, or Excel</div>
+      <input type="file" id="targetInput" accept=".csv,.tsv,.txt,.json,.xlsx,.xls" style="display:none"/>
+    </div>
+    ${state.targetFileName ? `<p style="color:#047857;font-size:13px;margin-top:10px;">Loaded: ${esc(state.targetFileName)}</p>` : ""}
+    ${state.formatRules.length>0 ? `
+      <h3 style="font-size:13px;margin-top:20px;">Detected formatting rules — review and confirm</h3>
+      <div class="tablebox"><table>
+        <thead><tr><th>Column</th><th>Type</th><th>Detected rule</th><th>Empty values</th><th></th></tr></thead>
+        <tbody>${state.formatRules.map((r,i)=>`
+          <tr>
+            <td><b>${esc(r.column)}</b></td>
+            <td>${r.type}</td>
+            <td>${r.editing ? `<input type="text" data-rule-edit="${i}" value="${esc(r.rule)}" style="width:100%"/>` : esc(r.rule)}</td>
+            <td style="color:#64748b">${r.nullRule ? esc(r.nullRule.display) : "—"}</td>
+            <td><button class="btn" data-rule-toggle="${i}" style="padding:3px 8px;font-size:12px;">${r.editing?"✓":"✏️"}</button></td>
+          </tr>
+        `).join("")}</tbody>
+      </table></div>
+    ` : ""}
+  `;
+}
+
+function step3(){
+  const headers = state.inputHeaders, rows = state.inputRows;
+  return `
+    <h2>Upload the input file(s) to convert</h2>
+    <p class="hint">Upload one or more files — they'll be batched using the same mapping and rules.</p>
+
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;">Input encoding (Feature 5)</label>
+      <select id="inputEncodingSelect" style="margin-top:4px;">
+        <option value="auto" ${state.inputEncoding==="auto"?"selected":""}>Auto-detect</option>
+        <option value="UTF-8" ${state.inputEncoding==="UTF-8"?"selected":""}>UTF-8</option>
+        <option value="SJIS" ${state.inputEncoding==="SJIS"?"selected":""}>Shift_JIS</option>
+        <option value="EUCJP" ${state.inputEncoding==="EUCJP"?"selected":""}>EUC-JP</option>
+        <option value="UNICODE" ${state.inputEncoding==="UNICODE"?"selected":""}>UTF-16</option>
+      </select>
+    </div>
+
+    <div class="drop" id="inputDrop"><div class="icon">⬆️</div><div>Drag files here, or click to browse</div><div class="hint" style="margin:4px 0 0;">CSV, TSV, JSON, TXT, Excel (PDF not supported here)</div>
+      <input type="file" id="inputInput" multiple accept=".csv,.tsv,.txt,.json,.xlsx,.xls" style="display:none"/>
+    </div>
+    ${state.inputFileNames.length>0 ? `<p style="color:#047857;font-size:13px;margin-top:10px;">Loaded: ${esc(state.inputFileNames.join(", "))} — ${rows.length} rows total ${state.inputEncoding !== 'auto' ? `(encoding: ${esc(state.inputEncoding)})` : ''}</p>` : ""}
+    ${rows.length>0 ? `
+      <div class="tablebox"><table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead>
+      <tbody>${rows.slice(0,10).map(r=>`<tr>${headers.map(h=>`<td>${esc(r[h]??"")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    ` : ""}
+  `;
+}
+
+function step4(){
+  const usedInputs = new Set(state.columnMap.filter(c=>c.action==="map" && c.inputColumn).map(c=>c.inputColumn));
+  const unusedInputs = state.inputHeaders.filter(h=>!usedInputs.has(h));
+  return `
+    <h2>Column mapping</h2>
+    <p class="hint">For each target column, choose where its data comes from.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Target column</th><th>Action</th><th>Detail</th><th>Status</th></tr></thead>
+      <tbody>${state.columnMap.map((c,i)=>{
+        const sampleValues = getSampleValues(c.targetColumn);
+        const status = columnStatus(c);
+        return `
+        <tr>
+          <td><b>${esc(c.targetColumn)}</b></td>
+          <td>
+            <select data-col-action="${i}">
+              <option value="">Choose action…</option>
+              <option value="map" ${c.action==="map"?"selected":""}>Map to an input column</option>
+              <option value="sample" ${c.action==="sample"?"selected":""}>Map from sample record</option>
+              <option value="skip" ${c.action==="skip"?"selected":""}>Skip this column</option>
+              <option value="blank" ${c.action==="blank"?"selected":""}>Blank</option>
+              <option value="default" ${c.action==="default"?"selected":""}>Default value</option>
+            </select>
+          </td>
+          <td>
+            ${c.action==="map" ? `
+              <select data-col-input="${i}">
+                <option value="">— choose input column —</option>
+                ${state.inputHeaders.map(h=>`<option value="${esc(h)}" ${c.inputColumn===h?"selected":""}>${esc(h)}</option>`).join("")}
+              </select>
+            ` : c.action==="sample" ? (
+              sampleValues.length ? `
+                <select data-col-sample="${i}">
+                  <option value="">— choose a sample value —</option>
+                  ${sampleValues.map(v=>`<option value="${esc(v)}" ${c.sampleValue===v?"selected":""}>${esc(v)}</option>`).join("")}
+                </select>
+              ` : `<span style="color:#b91c1c;font-size:12.5px">No sample values found</span>`
+            ) : c.action==="default" ? `
+              <input type="text" data-col-default="${i}" placeholder="Default value" value="${esc(c.defaultValue||"")}"/>
+            ` : c.action==="blank" ? `<span style="color:#94a3b8;font-size:12.5px">Will be left blank</span>`
+            : c.action==="skip" ? `<span style="color:#94a3b8;font-size:12.5px">Removed from output</span>`
+            : `<span style="color:#94a3b8;font-size:12.5px">—</span>`}
+          </td>
+          <td><span class="pill ${status}">${statusLabel(status)}</span></td>
+        </tr>
+      `;}).join("")}</tbody>
+    </table></div>
+    ${unusedInputs.length>0 ? `<p class="small-muted">Not used in any mapping: ${unusedInputs.map(esc).join(", ")}</p>` : ""}
+  `;
+}
+
+function step5(){
+  // Feature 2: Transform rules + Feature 3: Filter rules
+  return `
+    <h2>Transform & Filter rules</h2>
+    <p class="hint">Apply transformations and filters before formatting.</p>
+
+    <div class="tabs">
+      <div class="tab ${state.activeTab==='transforms'?"active":""}" data-tab="transforms">Transforms</div>
+      <div class="tab ${state.activeTab==='filters'?"active":""}" data-tab="filters">Filters</div>
+    </div>
+
+    <div class="tab-content ${state.activeTab==='transforms'?"active":""}">
+      <h3 style="font-size:13px;">Column transforms (Feature 2)</h3>
+      <p class="hint">Transform values before recoding and formatting. Applied in order.</p>
+      <div id="transformRows">
+        ${state.transformRules.map((r,i)=>`
+          <div class="transform-row">
+            <select data-transform-index="${i}" data-transform-field="column" style="min-width:120px;">
+              <option value="">— column —</option>
+              ${state.targetHeaders.map(t=>`<option value="${esc(t)}" ${r.column===t?"selected":""}>${esc(t)}</option>`).join("")}
+            </select>
+            <select data-transform-index="${i}" data-transform-field="type" style="min-width:130px;">
+              <option value="findReplace" ${r.type==="findReplace"?"selected":""}>Find & Replace</option>
+              <option value="substring" ${r.type==="substring"?"selected":""}>Substring</option>
+              <option value="conditional" ${r.type==="conditional"?"selected":""}>Conditional</option>
+              <option value="math" ${r.type==="math"?"selected":""}>Math</option>
+              <option value="prefix" ${r.type==="prefix"?"selected":""}>Prefix</option>
+              <option value="suffix" ${r.type==="suffix"?"selected":""}>Suffix</option>
+            </select>
+            ${r.type==="findReplace" ? `
+              <input type="text" data-transform-index="${i}" data-transform-field="find" placeholder="Find" value="${esc(r.find||"")}" style="width:100px;"/>
+              <input type="text" data-transform-index="${i}" data-transform-field="replace" placeholder="Replace" value="${esc(r.replace||"")}" style="width:100px;"/>
+              <label style="font-size:12px;"><input type="checkbox" data-transform-index="${i}" data-transform-field="useRegex" ${r.useRegex?"checked":""}/> Regex</label>
+            ` : r.type==="substring" ? `
+              <input type="number" data-transform-index="${i}" data-transform-field="start" placeholder="Start" value="${r.start||0}" style="width:60px;"/>
+              <input type="number" data-transform-index="${i}" data-transform-field="length" placeholder="Length" value="${r.length||""}" style="width:60px;"/>
+            ` : r.type==="conditional" ? `
+              <input type="text" data-transform-index="${i}" data-transform-field="conditionValue" placeholder="If =" value="${esc(r.conditionValue||"")}" style="width:80px;"/>
+              <input type="text" data-transform-index="${i}" data-transform-field="thenValue" placeholder="Then" value="${esc(r.thenValue||"")}" style="width:80px;"/>
+              <input type="text" data-transform-index="${i}" data-transform-field="elseValue" placeholder="Else" value="${esc(r.elseValue||"")}" style="width:80px;"/>
+            ` : r.type==="math" ? `
+              <select data-transform-index="${i}" data-transform-field="mathOp" style="width:100px;">
+                <option value="add" ${r.mathOp==="add"?"selected":""}>Add</option>
+                <option value="subtract" ${r.mathOp==="subtract"?"selected":""}>Subtract</option>
+                <option value="multiply" ${r.mathOp==="multiply"?"selected":""}>Multiply</option>
+                <option value="divide" ${r.mathOp==="divide"?"selected":""}>Divide</option>
+                <option value="round" ${r.mathOp==="round"?"selected":""}>Round</option>
+                <option value="floor" ${r.mathOp==="floor"?"selected":""}>Floor</option>
+                <option value="ceil" ${r.mathOp==="ceil"?"selected":""}>Ceil</option>
+                <option value="abs" ${r.mathOp==="abs"?"selected":""}>Abs</option>
+              </select>
+              <input type="number" data-transform-index="${i}" data-transform-field="mathValue" placeholder="Value" value="${r.mathValue||""}" style="width:80px;"/>
+            ` : r.type==="prefix" ? `
+              <input type="text" data-transform-index="${i}" data-transform-field="prefix" placeholder="Prefix" value="${esc(r.prefix||"")}" style="width:150px;"/>
+            ` : r.type==="suffix" ? `
+              <input type="text" data-transform-index="${i}" data-transform-field="suffix" placeholder="Suffix" value="${esc(r.suffix||"")}" style="width:150px;"/>
+            ` : ""}
+            <label style="font-size:12px;margin-left:auto;"><input type="checkbox" data-transform-index="${i}" data-transform-field="active" ${r.active!==false?"checked":""}/> Active</label>
+            <button class="btn" data-transform-remove="${i}" style="padding:3px 8px;font-size:12px;">✕</button>
+          </div>
+        `).join("")}
+      </div>
+      <button class="btn" id="addTransformBtn" style="margin-top:4px;">+ Add transform rule</button>
+    </div>
+
+    <div class="tab-content ${state.activeTab==='filters'?"active":""}">
+      <h3 style="font-size:13px;">Row filters (Feature 3)</h3>
+      <p class="hint">Include or exclude rows based on conditions. All filter rules must pass for a row to be included.</p>
+      <div id="filterRows">
+        ${state.filterRules.map((r,i)=>`
+          <div class="filter-row">
+            <select data-filter-index="${i}" data-filter-field="action" style="width:100px;">
+              <option value="include" ${r.action==="include"?"selected":""}>Include if</option>
+              <option value="exclude" ${r.action==="exclude"?"selected":""}>Exclude if</option>
+            </select>
+            <select data-filter-index="${i}" data-filter-field="column" style="min-width:120px;">
+              <option value="">— column —</option>
+              ${state.inputHeaders.map(h=>`<option value="${esc(h)}" ${r.column===h?"selected":""}>${esc(h)}</option>`).join("")}
+            </select>
+            <select data-filter-index="${i}" data-filter-field="operator" style="width:120px;">
+              <option value="equals" ${r.operator==="equals"?"selected":""}>equals</option>
+              <option value="notEquals" ${r.operator==="notEquals"?"selected":""}>not equals</option>
+              <option value="contains" ${r.operator==="contains"?"selected":""}>contains</option>
+              <option value="notContains" ${r.operator==="notContains"?"selected":""}>not contains</option>
+              <option value="startsWith" ${r.operator==="startsWith"?"selected":""}>starts with</option>
+              <option value="endsWith" ${r.operator==="endsWith"?"selected":""}>ends with</option>
+              <option value="greaterThan" ${r.operator==="greaterThan"?"selected":""}>greater than</option>
+              <option value="lessThan" ${r.operator==="lessThan"?"selected":""}>less than</option>
+              <option value="regex" ${r.operator==="regex"?"selected":""}>matches regex</option>
+              <option value="empty" ${r.operator==="empty"?"selected":""}>is empty</option>
+              <option value="notEmpty" ${r.operator==="notEmpty"?"selected":""}>is not empty</option>
+            </select>
+            ${r.operator !== "empty" && r.operator !== "notEmpty" ? `
+              <input type="text" data-filter-index="${i}" data-filter-field="value" placeholder="Value" value="${esc(r.value||"")}" style="width:120px;"/>
+            ` : ""}
+            <label style="font-size:12px;margin-left:auto;"><input type="checkbox" data-filter-index="${i}" data-filter-field="active" ${r.active!==false?"checked":""}/> Active</label>
+            <button class="btn" data-filter-remove="${i}" style="padding:3px 8px;font-size:12px;">✕</button>
+          </div>
+        `).join("")}
+      </div>
+      <button class="btn" id="addFilterBtn" style="margin-top:4px;">+ Add filter rule</button>
+    </div>
+  `;
+}
+
+function step6(){
+  const s = state.settings;
+  const sepOptions = [
+    {v:",", l:"Comma"},
+    {v:"|", l:"Pipe"},
+    {v:"\t", l:"Tab"},
+    {v:";", l:"Semicolon"}
+  ];
+  const currentSep = s.separator === "\t" ? "\t" : s.separator;
+  return `
+    <h2>Output format & settings</h2>
+    <div class="grid2">
+      <div>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Output format</label>
+        <select id="fmtSelect" style="width:100%">${["CSV","TSV","TXT","JSON","Pipe-delimited"].map(f=>`<option ${s.format===f?"selected":""}>${f}</option>`).join("")}</select>
+      </div>
+      ${s.format!=="JSON" ? `
+      <div>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Separator</label>
+        <select id="sepSelect" style="width:100%">${sepOptions.map(opt=>`<option value="${opt.v}" ${currentSep===opt.v?"selected":""}>${opt.l}</option>`).join("")}</select>
+      </div>
+      <div><label class="row"><input type="checkbox" id="hdrCheck" ${s.header?"checked":""}/> Include header row</label></div>
+      ` : ""}
+    </div>
+
+    <div style="margin-bottom:18px;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Output encoding (Feature 5)</label>
+      <select id="outputEncodingSelect" style="width:200px;">
+        <option value="UTF-8" ${state.outputEncoding==="UTF-8"?"selected":""}>UTF-8</option>
+        <option value="SJIS" ${state.outputEncoding==="SJIS"?"selected":""}>Shift_JIS</option>
+        <option value="EUCJP" ${state.outputEncoding==="EUCJP"?"selected":""}>EUC-JP</option>
+        <option value="UNICODE" ${state.outputEncoding==="UNICODE"?"selected":""}>UTF-16</option>
+      </select>
+    </div>
+
+    <h3 style="font-size:13px;">Optional formatting overrides</h3>
+    <label class="row"><input type="checkbox" id="ov_trim" ${s.trim?"checked":""}/> Trim extra whitespace from all values</label>
+    <label class="row"><input type="checkbox" id="ov_skipEmpty" ${s.skipEmpty?"checked":""}/> Skip completely empty rows</label>
+    <label class="row"><input type="checkbox" id="ov_quoteText" ${s.quoteText?"checked":""}/> Wrap text values in double quotes</label>
+    <label class="row"><input type="checkbox" id="ov_overrideDate" ${s.overrideDate?"checked":""}/> Override date format
+      ${s.overrideDate ? `<input type="text" id="ov_dateFormat" value="${esc(s.dateFormat)}" placeholder="e.g. DD/MM/YYYY" style="width:140px"/>` : ""}</label>
+    <label class="row"><input type="checkbox" id="ov_overrideDecimals" ${s.overrideDecimals?"checked":""}/> Override decimal places
+      ${s.overrideDecimals ? `<input type="number" id="ov_decimals" value="${s.decimals}" style="width:70px"/>` : ""}</label>
+    <label class="row"><input type="checkbox" id="ov_overrideCase" ${s.overrideCase?"checked":""}/> Override text case
+      ${s.overrideCase ? `<select id="ov_caseValue"><option ${s.caseValue==="UPPER"?"selected":""}>UPPER</option><option ${s.caseValue==="lower"?"selected":""}>lower</option><option ${s.caseValue==="Title"?"selected":""}>Title</option></select>` : ""}</label>
+    <label class="row"><input type="checkbox" id="ov_replaceEmpty" ${s.replaceEmpty?"checked":""}/> Replace empty values with
+      ${s.replaceEmpty ? `<input type="text" id="ov_replaceValue" value="${esc(s.replaceValue)}" placeholder="e.g. N/A" style="width:120px"/>` : ""}</label>
+
+    <h3 style="font-size:13px;margin-top:20px;">Value recoding</h3>
+    <p class="hint" style="margin-bottom:10px;">Recode specific values for any column — e.g. input "B" → output "1", "S" → "2". Matched on the original input value, applied before other formatting.</p>
+    <div id="recodeRows">
+      ${state.recodeRules.map((r,i)=>`
+        <div class="editrow" style="background:#fff;border-color:var(--line);">
+          <select data-recode-col="${i}" style="min-width:140px;">
+            <option value="">— column —</option>
+            ${state.targetHeaders.map(t=>`<option value="${esc(t)}" ${r.column===t?"selected":""}>${esc(t)}</option>`).join("")}
+          </select>
+          <input type="text" data-recode-find="${i}" placeholder="Find (e.g. B)" value="${esc(r.find||"")}" style="width:110px;"/>
+          <span style="color:#94a3b8;">→</span>
+          <input type="text" data-recode-replace="${i}" placeholder="Replace (e.g. 1)" value="${esc(r.replace||"")}" style="width:110px;"/>
+          <button class="btn" data-recode-remove="${i}" style="padding:5px 9px;font-size:12px;margin-left:auto;">✕</button>
+        </div>
+      `).join("")}
+    </div>
+    <button class="btn" id="addRecodeBtn" style="margin-top:4px;">+ Add recoding rule</button>
+
+    <h3 style="font-size:13px;margin-top:20px;">Split output (Feature 4)</h3>
+    <div class="split-option">
+      <label class="row" style="margin-bottom:0;"><input type="checkbox" id="splitEnable" ${state.splitSettings.enabled?"checked":""}/> Enable splitting</label>
+    </div>
+    ${state.splitSettings.enabled ? `
+      <div class="grid2">
+        <div>
+          <label style="font-size:13px;">Split by</label>
+          <select id="splitType" style="width:100%;margin-top:4px;">
+            <option value="none" ${state.splitSettings.type==="none"?"selected":""}>No split</option>
+            <option value="rows" ${state.splitSettings.type==="rows"?"selected":""}>Row count</option>
+            <option value="column" ${state.splitSettings.type==="column"?"selected":""}>Column value</option>
+          </select>
+        </div>
+        ${state.splitSettings.type === "rows" ? `
+        <div>
+          <label style="font-size:13px;">Max rows per file</label>
+          <input type="number" id="splitValue" value="${state.splitSettings.value}" style="width:100%;margin-top:4px;"/>
+        </div>
+        ` : state.splitSettings.type === "column" ? `
+        <div>
+          <label style="font-size:13px;">Split by column</label>
+          <select id="splitValue" style="width:100%;margin-top:4px;">
+            <option value="">— select column —</option>
+            ${state.targetHeaders.map(h=>`<option value="${esc(h)}" ${state.splitSettings.value===h?"selected":""}>${esc(h)}</option>`).join("")}
+          </select>
+        </div>
+        ` : ""}
+      </div>
+    ` : ""}
+  `;
+}
+
+function step7(){
+  // Feature 1: Validation results display
+  if(!state.validationResults){
+    return `<h2>Validation</h2><p style="color:#94a3b8;font-style:italic;">Click "Validate & Preview" to run validation checks.</p>`;
+  }
+  const v = state.validationResults;
+  const errorCount = v.issues.filter(i => i.type === "error").length;
+  const warnCount = v.issues.filter(i => i.type === "warn").length;
+  const okCount = v.issues.filter(i => i.type === "ok").length;
+
+  return `
+    <h2>Validation Results (Feature 1)</h2>
+    <div class="summary">
+      <div class="sumcard ${errorCount > 0 ? 'warn-c' : 'ok-c'}"><div class="v">${errorCount}</div><div class="l">Errors</div></div>
+      <div class="sumcard ${warnCount > 0 ? 'warn-c' : 'ok-c'}"><div class="v">${warnCount}</div><div class="l">Warnings</div></div>
+      <div class="sumcard slate-c"><div class="v">${okCount}</div><div class="l">Info</div></div>
+    </div>
+    <p class="hint">Checked ${v.totalRows} rows at ${v.checkedAt}</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Severity</th><th>Issue</th></tr></thead>
+      <tbody>${v.issues.map(i=>`
+        <tr>
+          <td><span class="${i.type === 'error' ? 'val-error' : i.type === 'warn' ? 'val-warn' : 'val-ok'}">${i.type.toUpperCase()}</span></td>
+          <td>${esc(i.message)}</td>
+        </tr>
+      `).join("")}</tbody>
+    </table></div>
+    ${errorCount > 0 ? `<p style="color:var(--err-fg);font-size:13px;">⚠️ ${errorCount} errors found. Review before proceeding, or continue if intentional.</p>` : ""}
+  `;
+}
+
+function step8(){
+  if(state.converting) return `<p style="color:#94a3b8;font-style:italic;">Running conversion…</p>`;
+  const r = state.result;
+  if(!r) return `<p style="color:#94a3b8;font-style:italic;">Running conversion…</p>`;
+
+  return `
+    <h2>Preview & Convert</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="summary" style="flex:1;margin-bottom:0;">
+        <div class="sumcard ok-c"><div class="v">${r.rows.length}</div><div class="l">Rows converted</div></div>
+        <div class="sumcard warn-c"><div class="v">${r.skipped}</div><div class="l">Rows skipped</div></div>
+        <div class="sumcard slate-c"><div class="v">${r.filteredCount || 0}</div><div class="l">Rows filtered</div></div>
+      </div>
+      <button class="btn ${state.showDiff ? 'primary' : ''}" id="toggleDiffBtn" style="margin-left:12px;">${state.showDiff ? 'Standard View' : 'Diff View'}</button>
+    </div>
+
+    ${state.showDiff ? renderDiffView(r) : renderStandardPreview(r)}
+  `;
+}
+
+function renderStandardPreview(r){
+  return `
+    <h3 style="font-size:13px;">Converted output (first 10 rows)</h3>
+    <div class="tablebox"><table><thead><tr>${r.columns.map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead>
+    <tbody>${r.rows.slice(0,10).map(row=>`<tr>${r.columns.map(c=>`<td>${esc(row[c]??"")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+  `;
+}
+
+function renderDiffView(r){
+  // Feature 8: Side-by-side diff showing original vs converted
+  const activeCols = state.columnMap.filter(c => c.action !== "skip");
+  const inputCols = activeCols.filter(c => c.action === "map").map(c => c.inputColumn);
+
+  return `
+    <h3 style="font-size:13px;">Side-by-side diff (Feature 8) — first 5 rows</h3>
+    <div class="tablebox"><table class="diff-table">
+      <thead><tr>
+        <th>Row</th>
+        ${activeCols.map(c => `<th colspan="2">${esc(c.targetColumn)}</th>`).join("")}
+      </tr>
+      <tr>
+        <th></th>
+        ${activeCols.map(() => `<th style="font-size:10px;color:#94a3b8;">Input</th><th style="font-size:10px;color:#94a3b8;">Output</th>`).join("")}
+      </tr></thead>
+      <tbody>
+        ${state.inputRows.slice(0,5).map((inputRow, idx) => {
+          const outRow = r.rows[idx] || {};
+          return `<tr>
+            <td style="font-weight:600;">${idx + 1}</td>
+            ${activeCols.map(c => {
+              const inVal = c.action === "map" ? String(inputRow[c.inputColumn] ?? "") : c.action === "sample" ? c.sampleValue : c.action === "default" ? c.defaultValue : "";
+              const outVal = String(outRow[c.targetColumn] ?? "");
+              const changed = inVal !== outVal;
+              return `<td class="${changed ? 'diff-unchanged' : ''}">${esc(inVal)}</td><td class="${changed ? 'diff-changed' : 'diff-unchanged'}">${esc(outVal)}</td>`;
+            }).join("")}
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table></div>
+    <p class="hint">Changed values are highlighted in blue. Unchanged values are shown in gray.</p>
+  `;
+}
+
+function step9(){
+  const defaultName = `${(state.targetFileName||"Profile").replace(/\.[^/.]+$/,"")}_${new Date().toISOString().slice(0,10)}`;
+  return `
+    <h2>Download & save profile</h2>
+    <p class="hint">Your file is generated locally and never uploaded anywhere.</p>
+    <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Profile name</label>
+    <input type="text" id="profileNameInput" value="${esc(state.profileName)}" placeholder="${esc(defaultName)}" style="width:100%;margin-bottom:18px;"/>
+    <button class="btn primary" id="downloadBtn" style="margin-bottom:20px;">⬇ Download converted file</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn" id="anotherBtn">🔁 Convert another file, same profile</button>
+      <button class="btn" id="newBtn">🆕 Start new conversion</button>
+      <button class="btn" id="dashBtn">📂 View saved profiles</button>
+    </div>
+  `;
+}
+
+/* ======================= EVENT HANDLERS ======================= */
+function bindEvents(){
+  const $ = (id)=>document.getElementById(id);
+
+  if($("backBtn")) $("backBtn").onclick = ()=> setState({step: Math.max(1, state.step-1)});
+  if($("nextBtn")) $("nextBtn").onclick = async ()=>{
+    setState({error:""});
+    if(state.step===7){
+      // Run validation and preview
+      setState({converting: true});
+      await new Promise(r=>setTimeout(r, 50));
+      const targetRulesByCol = {};
+      state.formatRules.forEach(r => targetRulesByCol[r.column] = r);
+      const inputRulesByCol = {};
+      state.inputFormatRules.forEach(r => inputRulesByCol[r.column] = r);
+
+      // Run validation (Feature 1)
+      const validation = validateData(state.inputRows, state.columnMap, targetRulesByCol, inputRulesByCol);
+
+      // Run conversion
+      const out = convertRows(state.inputRows, state.columnMap, targetRulesByCol, inputRulesByCol, state.settings, state.recodeRules, state.transformRules, state.filterRules);
+      setState({result: {...out, total: state.inputRows.length}, converting: false, validationResults: validation, step: 8});
+      return;
+    }
+    if(state.step===8){
+      setState({step: 9});
+      return;
+    }
+    setState({step: Math.min(9, state.step+1)});
+  };
+  if($("undoBtn")) $("undoBtn").onclick = undo;
+  if($("redoBtn")) $("redoBtn").onclick = redo;
+
+  // Step 1
+  if($("newConvCard")) $("newConvCard").onclick = ()=> setState({step:2});
+  if($("importCard")) $("importCard").onclick = ()=> $("importInput").click();
+  if($("importInput")) $("importInput").onchange = (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    file.text().then(text=>{
+      try{
+        const data = JSON.parse(text);
+        const merged = [...data, ...state.savedProfiles];
+        setState({savedProfiles: merged}); saveProfilesToDisk();
+      }catch{ setState({error:"That file doesn't look like a valid profile backup."}); }
+    });
+  };
+  if($("exportBtn")) $("exportBtn").onclick = ()=> downloadText(JSON.stringify(state.savedProfiles,null,2), "conversion_profiles_backup.json", "application/json");
+
+  // Feature 7: Template loading
+  document.querySelectorAll("[data-template-id]").forEach(card=>{
+    card.onclick = ()=>{
+      const template = BUILTIN_TEMPLATES.find(t => t.id === card.dataset.templateId);
+      if(template){
+        setState({
+          targetFileName: template.name,
+          targetHeaders: template.targetHeaders,
+          targetSampleRows: [],
+          formatRules: template.formatRules,
+          columnMap: template.columnMap,
+          settings: template.settings,
+          recodeRules: template.recodeRules,
+          transformRules: template.transformRules,
+          filterRules: template.filterRules,
+          splitSettings: template.splitSettings,
+          step: 3
+        });
+      }
+    };
+  });
+
+  document.querySelectorAll("[data-load]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const p = state.savedProfiles[Number(btn.dataset.load)];
+      setState({
+        targetFileName: p.targetFileName, formatRules: p.formatRules,
+        targetHeaders: p.formatRules.map(r=>r.column),
+        columnMap: p.columnMap, settings: p.settings, recodeRules: p.recodeRules || [],
+        transformRules: p.transformRules || [],
+        filterRules: p.filterRules || [],
+        splitSettings: p.splitSettings || { enabled:false, type:"none", value:10000 },
+        step: 2, inputFileNames: [], inputHeaders: [], inputRows: [], inputFormatRules: []
+      });
+    };
+  });
+
+  if($("clearDraftBtn")) $("clearDraftBtn").onclick = ()=>{ clearDraft(); setState({draftRecovered: false}); };
+
+  // Step 2
+  setupDrop("targetDrop","targetInput", handleTargetFiles);
+  document.querySelectorAll("[data-rule-toggle]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = Number(btn.dataset.ruleToggle);
+      const rules = [...state.formatRules]; rules[i] = {...rules[i], editing: !rules[i].editing};
+      setState({formatRules: rules});
+    };
+  });
+  document.querySelectorAll("[data-rule-edit]").forEach(inp=>{
+    inp.onchange = ()=>{
+      const i = Number(inp.dataset.ruleEdit);
+      const rules = [...state.formatRules]; rules[i] = {...rules[i], rule: inp.value};
+      setState({formatRules: rules});
+    };
+  });
+
+  // Step 3
+  if($("inputEncodingSelect")) $("inputEncodingSelect").onchange = (e)=> setState({inputEncoding: e.target.value});
+  setupDrop("inputDrop","inputInput", handleInputFiles);
+
+  // Step 4
+  document.querySelectorAll("[data-col-action]").forEach(sel=>{
+    sel.onchange = ()=>{
+      const i = Number(sel.dataset.colAction);
+      const columnMap = [...state.columnMap];
+      const action = sel.value || null;
+      columnMap[i] = {...columnMap[i], action, inputColumn: action==="map" ? columnMap[i].inputColumn : null, sampleValue: action==="sample" ? columnMap[i].sampleValue : "", defaultValue: action==="default" ? columnMap[i].defaultValue : ""};
+      setState({columnMap});
+    };
+  });
+  document.querySelectorAll("[data-col-input]").forEach(sel=>{
+    sel.onchange = ()=>{
+      const i = Number(sel.dataset.colInput);
+      const columnMap = [...state.columnMap];
+      columnMap[i] = {...columnMap[i], inputColumn: sel.value || null};
+      setState({columnMap});
+    };
+  });
+  document.querySelectorAll("[data-col-sample]").forEach(sel=>{
+    sel.onchange = ()=>{
+      const i = Number(sel.dataset.colSample);
+      const columnMap = [...state.columnMap];
+      columnMap[i] = {...columnMap[i], sampleValue: sel.value || ""};
+      setState({columnMap});
+    };
+  });
+  document.querySelectorAll("[data-col-default]").forEach(inp=>{
+    inp.onchange = ()=>{
+      const i = Number(inp.dataset.colDefault);
+      const columnMap = [...state.columnMap];
+      columnMap[i] = {...columnMap[i], defaultValue: inp.value};
+      setState({columnMap});
+    };
+  });
+
+  // Step 5: Tabs
+  document.querySelectorAll("[data-tab]").forEach(tab=>{
+    tab.onclick = ()=> setState({activeTab: tab.dataset.tab});
+  });
+
+  // Transform rules
+  if($("addTransformBtn")) $("addTransformBtn").onclick = ()=> setState({transformRules: [...state.transformRules, {column:"", type:"findReplace", find:"", replace:"", useRegex:false, active:true}]});
+  document.querySelectorAll("[data-transform-index]").forEach(el=>{
+    el.onchange = ()=>{
+      const i = Number(el.dataset.transformIndex);
+      const field = el.dataset.transformField;
+      const rules = [...state.transformRules];
+      rules[i] = {...rules[i], [field]: el.type === "checkbox" ? el.checked : el.value};
+      setState({transformRules: rules});
+    };
+  });
+  document.querySelectorAll("[data-transform-remove]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = Number(btn.dataset.transformRemove);
+      setState({transformRules: state.transformRules.filter((_,idx)=>idx!==i)});
+    };
+  });
+
+  // Filter rules
+  if($("addFilterBtn")) $("addFilterBtn").onclick = ()=> setState({filterRules: [...state.filterRules, {action:"include", column:"", operator:"equals", value:"", active:true}]});
+  document.querySelectorAll("[data-filter-index]").forEach(el=>{
+    el.onchange = ()=>{
+      const i = Number(el.dataset.filterIndex);
+      const field = el.dataset.filterField;
+      const rules = [...state.filterRules];
+      rules[i] = {...rules[i], [field]: el.type === "checkbox" ? el.checked : el.value};
+      setState({filterRules: rules});
+    };
+  });
+  document.querySelectorAll("[data-filter-remove]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = Number(btn.dataset.filterRemove);
+      setState({filterRules: state.filterRules.filter((_,idx)=>idx!==i)});
+    };
+  });
+
+  // Step 6
+  bindSettingsInputs($);
+  if($("addRecodeBtn")) $("addRecodeBtn").onclick = ()=> setState({recodeRules: [...state.recodeRules, {column:"", find:"", replace:""}]});
+  document.querySelectorAll("[data-recode-col]").forEach(sel=>{
+    sel.onchange = ()=>{
+      const i = Number(sel.dataset.recodeCol);
+      const rules = [...state.recodeRules]; rules[i] = {...rules[i], column: sel.value};
+      setState({recodeRules: rules});
+    };
+  });
+  document.querySelectorAll("[data-recode-find]").forEach(inp=>{
+    inp.onchange = ()=>{
+      const i = Number(inp.dataset.recodeFind);
+      const rules = [...state.recodeRules]; rules[i] = {...rules[i], find: inp.value};
+      setState({recodeRules: rules});
+    };
+  });
+  document.querySelectorAll("[data-recode-replace]").forEach(inp=>{
+    inp.onchange = ()=>{
+      const i = Number(inp.dataset.recodeReplace);
+      const rules = [...state.recodeRules]; rules[i] = {...rules[i], replace: inp.value};
+      setState({recodeRules: rules});
+    };
+  });
+  document.querySelectorAll("[data-recode-remove]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = Number(btn.dataset.recodeRemove);
+      setState({recodeRules: state.recodeRules.filter((_,idx)=>idx!==i)});
+    };
+  });
+
+  // Split settings (Feature 4)
+  if($("splitEnable")) $("splitEnable").onchange = (e)=>{
+    setState({splitSettings: {...state.splitSettings, enabled: e.target.checked}});
+  };
+  if($("splitType")) $("splitType").onchange = (e)=>{
+    setState({splitSettings: {...state.splitSettings, type: e.target.value, value: e.target.value === "rows" ? 10000 : ""}});
+  };
+  if($("splitValue")) $("splitValue").onchange = (e)=>{
+    setState({splitSettings: {...state.splitSettings, value: e.target.value}});
+  };
+
+  // Step 8: Diff toggle
+  if($("toggleDiffBtn")) $("toggleDiffBtn").onclick = ()=> setState({showDiff: !state.showDiff});
+
+  // Step 9
+  if($("profileNameInput")) $("profileNameInput").oninput = (e)=> setState({profileName: e.target.value});
+  if($("downloadBtn")) $("downloadBtn").onclick = doDownload;
+  if($("anotherBtn")) $("anotherBtn").onclick = ()=> setState({step:3, inputFileNames:[], inputHeaders:[], inputRows:[], inputFormatRules:[], result:null});
+  if($("newBtn")) $("newBtn").onclick = resetAll;
+  if($("dashBtn")) $("dashBtn").onclick = ()=> setState({step:1});
+
+  // Feature 10: Keyboard shortcuts
+  document.onkeydown = (e)=>{
+    if(e.ctrlKey || e.metaKey){
+      if(e.key === 'Enter' && e.shiftKey){
+        e.preventDefault();
+        if(state.step === 7 || state.step === 8) $("nextBtn")?.click();
+      } else if(e.key === 'Enter' && !e.shiftKey){
+        e.preventDefault();
+        $("nextBtn")?.click();
+      } else if(e.key === 'z' && !e.shiftKey){
+        e.preventDefault();
+        undo();
+      } else if(e.key === 'y' || (e.key === 'z' && e.shiftKey)){
+        e.preventDefault();
+        redo();
+      }
+    }
+    if(e.key === 'Escape' && state.step > 1){
+      e.preventDefault();
+      setState({step: Math.max(1, state.step - 1)});
+    }
+  };
+}
+
+function setupDrop(dropId, inputId, handler){
+  const drop = document.getElementById(dropId), input = document.getElementById(inputId);
+  if(!drop) return;
+  drop.onclick = ()=> input.click();
+  drop.ondragover = (e)=>{ e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = ()=> drop.classList.remove("over");
+  drop.ondrop = (e)=>{ e.preventDefault(); drop.classList.remove("over"); handler(Array.from(e.dataTransfer.files)); };
+  input.onchange = (e)=> handler(Array.from(e.target.files));
+}
+
+function bindSettingsInputs($){
+  const set = (patch)=> setState({settings: {...state.settings, ...patch}});
+  if($("fmtSelect")) $("fmtSelect").onchange = (e)=> set({format:e.target.value});
+  if($("sepSelect")) $("sepSelect").onchange = (e)=>{
+    const val = e.target.value;
+    set({separator: val === "\t" ? "\t" : val});
+  };
+  if($("hdrCheck")) $("hdrCheck").onchange = (e)=> set({header:e.target.checked});
+  if($("ov_trim")) $("ov_trim").onchange = (e)=> set({trim:e.target.checked});
+  if($("ov_skipEmpty")) $("ov_skipEmpty").onchange = (e)=> set({skipEmpty:e.target.checked});
+  if($("ov_quoteText")) $("ov_quoteText").onchange = (e)=> set({quoteText:e.target.checked});
+  if($("ov_overrideDate")) $("ov_overrideDate").onchange = (e)=> set({overrideDate:e.target.checked});
+  if($("ov_dateFormat")) $("ov_dateFormat").onchange = (e)=> set({dateFormat:e.target.value});
+  if($("ov_overrideDecimals")) $("ov_overrideDecimals").onchange = (e)=> set({overrideDecimals:e.target.checked});
+  if($("ov_decimals")) $("ov_decimals").onchange = (e)=> set({decimals:Number(e.target.value)});
+  if($("ov_overrideCase")) $("ov_overrideCase").onchange = (e)=> set({overrideCase:e.target.checked});
+  if($("ov_caseValue")) $("ov_caseValue").onchange = (e)=> set({caseValue:e.target.value});
+  if($("ov_replaceEmpty")) $("ov_replaceEmpty").onchange = (e)=> set({replaceEmpty:e.target.checked});
+  if($("ov_replaceValue")) $("ov_replaceValue").onchange = (e)=> set({replaceValue:e.target.value});
+  if($("outputEncodingSelect")) $("outputEncodingSelect").onchange = (e)=> setState({outputEncoding: e.target.value});
+}
+
+/* ======================= ACTIONS ======================= */
+async function handleTargetFiles(files){
+  setState({error:""});
+  const file = files[0]; if(!file) return;
+  try{
+    const {headers, rows} = await parseFile(file);
+    if(!headers.length) throw new Error("No columns detected — make sure the file has a header row.");
+    if(rows.length < 2) throw new Error("Upload a sample file with at least a couple of data rows so formatting can be detected.");
+    setState({ targetFileName: file.name, targetHeaders: headers, targetSampleRows: rows, formatRules: detectColumnRules(headers, rows) });
+  }catch(e){ setState({error: e.message}); }
+}
+
+async function handleInputFiles(files){
+  setState({error:""});
+  if(!files.length) return;
+  try{
+    let allHeaders=[], allRows=[];
+    for(const file of files){
+      const {headers, rows} = await parseFile(file, state.inputEncoding);
+      allHeaders = Array.from(new Set([...allHeaders, ...headers]));
+      allRows = allRows.concat(rows);
+    }
+    setState({
+      inputFileNames: files.map(f=>f.name), inputHeaders: allHeaders, inputRows: allRows,
+      inputFormatRules: detectColumnRules(allHeaders, allRows),
+      columnMap: autoMapTargets(state.targetHeaders, allHeaders)
+    });
+  }catch(e){ setState({error: e.message}); }
+}
+
+function doDownload(){
+  const r = state.result; if(!r) return;
+  const ext = {CSV:"csv",TSV:"tsv",TXT:"txt",JSON:"json","Pipe-delimited":"txt"}[state.settings.format] || "txt";
+  const mime = state.settings.format==="JSON" ? "application/json" : "text/csv";
+
+  // Feature 4: Handle split output
+  if(state.splitSettings.enabled && state.splitSettings.type !== "none"){
+    if(state.splitSettings.type === "rows"){
+      const maxRows = parseInt(state.splitSettings.value) || 10000;
+      const chunks = [];
+      for(let i = 0; i < r.rows.length; i += maxRows){
+        chunks.push(r.rows.slice(i, i + maxRows));
+      }
+      chunks.forEach((chunk, idx) => {
+        const text = generateOutputText(chunk, r.columns, state.settings, state.outputEncoding);
+        const name = `${(state.targetFileName||"output").replace(/\.[^/.]+$/,"")}_converted_${idx + 1}.${ext}`;
+        downloadText(text, name, mime, state.outputEncoding);
+      });
+    } else if(state.splitSettings.type === "column" && state.splitSettings.value){
+      const splitCol = state.splitSettings.value;
+      const groups = {};
+      r.rows.forEach(row => {
+        const key = row[splitCol] || "_empty";
+        if(!groups[key]) groups[key] = [];
+        groups[key].push(row);
+      });
+      Object.entries(groups).forEach(([key, rows]) => {
+        const text = generateOutputText(rows, r.columns, state.settings, state.outputEncoding);
+        const safeKey = String(key).replace(/[^a-z0-9_-]/gi, '_');
+        const name = `${(state.targetFileName||"output").replace(/\.[^/.]+$/,"")}_converted_${safeKey}.${ext}`;
+        downloadText(text, name, mime, state.outputEncoding);
+      });
+    }
+  } else {
+    const text = generateOutputText(r.rows, r.columns, state.settings, state.outputEncoding);
+    const name = `${(state.targetFileName||"output").replace(/\.[^/.]+$/,"")}_converted.${ext}`;
+    downloadText(text, name, mime, state.outputEncoding);
+  }
+
+  const profile = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+    name: state.profileName || `${state.targetFileName||"Profile"}_${new Date().toISOString().slice(0,10)}`,
+    date: new Date().toLocaleString(),
+    targetFileName: state.targetFileName, formatRules: state.formatRules, columnMap: state.columnMap, settings: state.settings, recodeRules: state.recodeRules,
+    transformRules: state.transformRules, filterRules: state.filterRules, splitSettings: state.splitSettings,
+    lastInputFiles: state.inputFileNames, rowCount: r.rows.length,
+    status: r.rows.length ? "success" : "no rows"
+  };
+  const profiles = [profile, ...state.savedProfiles.filter(p=>p.id!==profile.id)].slice(0,30);
+  state.savedProfiles = profiles; saveProfilesToDisk();
+  clearDraft();
+  render();
+}
+
+function resetAll(){
+  setState({
+    step:1, error:"", targetFileName:"", targetHeaders:[], targetSampleRows:[], formatRules:[],
+    inputFileNames:[], inputHeaders:[], inputRows:[], inputFormatRules:[], columnMap:[], recodeRules:[],
+    transformRules:[], filterRules:[], splitSettings:{enabled:false,type:"none",value:10000},
+    result:null, profileName:"", converting: false, validationResults:null, showDiff:false,
+    inputEncoding:"auto", outputEncoding:"UTF-8"
+  });
+  clearDraft();
+}
+
+// Feature 9: Check for draft on load
+if(loadDraft()){
+  render();
+} else {
+  render();
+}
+</script>
+</body>
+</html>
